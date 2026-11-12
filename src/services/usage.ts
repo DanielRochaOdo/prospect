@@ -17,7 +17,7 @@ export async function reserve(provider:Provider,operation:Operation,user:User){
   const config=await tx`SELECT monthly_limit, minute_limit, enabled FROM api_limits WHERE provider=${provider} AND operation=${operation}`;
   if(!config[0]?.enabled)throw new AppError(503,`Integração ${provider} desativada ou não configurada.`);
   const monthly=await tx`SELECT count(*)::int AS n FROM api_usage WHERE provider=${provider} AND operation=${operation} AND period_month=${p.month}`;
-  if(monthly[0].n>=config[0].monthly_limit)throw new AppError(429,`Limite mensal de ${provider}/${operation} atingido.`);
+  if(config[0].monthly_limit!==null && monthly[0].n>=config[0].monthly_limit)throw new AppError(429,`Limite mensal de ${provider}/${operation} atingido.`);
   const minute=await tx`SELECT count(*)::int AS n FROM api_usage WHERE provider=${provider} AND period_minute=${p.minute}`;
   // A taxa por minuto é compartilhada por provedor. Usa-se o menor limite ativo do provedor.
   const rates=await tx`SELECT min(minute_limit)::int AS max FROM api_limits WHERE provider=${provider} AND enabled=true`;

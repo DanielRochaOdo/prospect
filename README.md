@@ -74,6 +74,21 @@ A senha deve ter ao menos 12 caracteres, com letras maiúsculas, minúsculas e n
 
 O GitHub armazena o código-fonte; a aplicação web será efetivamente servida pela **Vercel**.
 
+## Tema claro/escuro e limites de consumo (atualização de novembro/2026)
+
+- O botão com ícones de sol e lua, disponível no cabeçalho e nas telas de login/configuração, alterna os temas e grava a preferência apenas no navegador (`localStorage`). Se não houver preferência, segue o tema do sistema operacional.
+- A tela **Configurações** foi reorganizada por fornecedor. Cada operação possui campos de limite e botão próprio **Salvar**. Mudanças não são aplicadas automaticamente.
+- Valores internos sugeridos para novos bancos: **cnpj.ai** sem teto mensal (`NULL`), compartilhando **60 chamadas/min** para as operações; **LocalizaCNPJ Free** **2.000/mês** e **40/min**; **Google Places Text Search Pro** **5.000/mês** e **20/min** (este último é um limite de proteção escolhido pelo Prospect, **não** uma cota oficial publicada pelo Google).
+- Na cnpj.ai, *sem teto mensal* indica somente que não há franquia mensal inicial publicada. O administrador pode ativar um teto interno opcional. O limite de 60/min é compartilhado entre todas as operações da mesma conta/chaves.
+- No Google, 5.000 é a **franquia sem cobrança** por SKU, não uma garantia de bloqueio externo. Se o consumo exceder essa franquia, poderá haver cobrança. Confira os limites efetivos no Google Cloud, principalmente se outras aplicações usarem o mesmo projeto.
+- Os limites ficam registrados no banco. Execute novamente a migração após atualizar o código: `node --env-file=.env.local scripts/migrate.mjs`. Ela altera a coluna mensal para permitir `NULL` e só converte os valores iniciais antigos se não houver alteração administrativa correspondente no log de auditoria. **Não altera valores personalizados** registrados anteriormente no painel.
+
+Fontes verificadas em 12/11/2026:
+- [cnpj.ai v2](https://cnpj.ai/api/docs)
+- [Planos LocalizaCNPJ](https://localizacnpj.com.br/portal-api)
+- [Tabela de preços Google Places (New)](https://developers.google.com/maps/billing-and-pricing/pricing)
+- [Limites e faturamento Google Places](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing)
+
 ## Endpoints internos
 
 | Método e rota | Função |

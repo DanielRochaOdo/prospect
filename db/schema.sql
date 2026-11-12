@@ -35,16 +35,18 @@ CREATE INDEX IF NOT EXISTS login_attempts_email_idx ON login_attempts(email,crea
 CREATE TABLE IF NOT EXISTS api_limits (
  provider text NOT NULL,
  operation text NOT NULL,
- monthly_limit integer NOT NULL CHECK(monthly_limit>=0),
+ monthly_limit integer CHECK(monthly_limit IS NULL OR monthly_limit>=0),
  minute_limit integer NOT NULL CHECK(minute_limit>=0),
  enabled boolean NOT NULL DEFAULT true,
  updated_at timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY(provider,operation)
 );
 -- statement
+ALTER TABLE api_limits ALTER COLUMN monthly_limit DROP NOT NULL;
+-- statement
 INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
- ('cnpjai','basic',1000,40),('cnpjai','branches',1000,40),
- ('localiza','search',1500,30),('google','text_pro',1000,20)
+ ('cnpjai','basic',NULL,60),('cnpjai','branches',NULL,60),
+ ('localiza','search',2000,40),('google','text_pro',5000,20)
 ON CONFLICT DO NOTHING;
 -- statement
 CREATE TABLE IF NOT EXISTS api_usage (
@@ -160,3 +162,21 @@ INSERT INTO segments(name,search_term,cnae) VALUES
  ('Materiais odontológicos','materiais odontológicos',NULL),
  ('Distribuidores odontológicos','distribuição de materiais odontológicos',NULL)
 ON CONFLICT (name) DO NOTHING;
+
+-- Atualização idempotente dos limites inicialmente fornecidos no app.
+-- Não sobrescrever edições administrativas registradas na auditoria.
+-- statement
+UPDATE api_limits l SET monthly_limit=NULL, minute_limit=60, updated_at=now()
+ WHERE l.provider='cnpjai' AND l.operation IN ('basic','branches')
+   AND l.monthly_limit=1000 AND l.minute_limit=40
+   AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.subject_type='api_limits' AND a.subject_id=l.provider||':'||l.operation AND a.action='update');
+-- statement
+UPDATE api_limits l SET monthly_limit=2000, minute_limit=40, updated_at=now()
+ WHERE l.provider='localiza' AND l.operation='search'
+   AND l.monthly_limit=1500 AND l.minute_limit=30
+   AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.subject_type='api_limits' AND a.subject_id=l.provider||':'||l.operation AND a.action='update');
+-- statement
+UPDATE api_limits l SET monthly_limit=5000, minute_limit=20, updated_at=now()
+ WHERE l.provider='google' AND l.operation='text_pro'
+   AND l.monthly_limit=1000 AND l.minute_limit=20
+   AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.subject_type='api_limits' AND a.subject_id=l.provider||':'||l.operation AND a.action='update');
