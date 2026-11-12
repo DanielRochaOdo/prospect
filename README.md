@@ -98,20 +98,30 @@ Os setores são atalhos de pesquisa e **não restringem o uso do sistema**: o us
 Ao rodar `node --env-file=.env.local scripts/migrate.mjs` após atualizar o código, a migração remove somente os cinco segmentos odontológicos do *seed* antigo que permaneçam com nome, termo, CNAE e status originais. Segmentos personalizados são preservados. Os novos setores são incluídos apenas quando ainda não existirem.
 
 
-### Identificação automática de gestores (OpenCNPJ + Exa)
+### Identificação automática de gestores (OpenCNPJ, Exa, Apollo e Hunter)
 
-A tela **Pesquisar empresas** mostra nomes e cargos sem exigir domínio corporativo nem botão de consulta. A pesquisa acontece somente para as empresas da **página visualizada**, uma vez por raiz de CNPJ, para economizar créditos.
+A tela **Pesquisar empresas** mostra automaticamente nomes e cargos para empresas da página aberta, sem campo de site e sem botão separado. Matriz e filiais compartilham uma consulta por raiz de CNPJ durante a sessão. As informações cadastrais são mantidas separadas dos resultados contextuais do Google Maps.
 
-- **OpenCNPJ, sem chave:** GET https://kitana.opencnpj.com/cnpj/{cnpj} devolve o quadro de sócios e administradores (QSA). Cada nome é associado **somente ao CNPJ idêntico** e acompanhado da qualificação da Receita. O fornecedor publica 300 req/min por IP; o Prospect adota limite interno conservador de 120/min e 3.000/mês, editáveis em Configurações.
-- **Exa People Search:** POST https://api.exa.ai/search com includeDomains: ["exa.ai/library/person"] pesquisa profissionais de RH, Benefícios e Diretoria a partir de razão social/nome fantasia, sem exigir que o usuário informe site. Somente perfis com nome, cargo e vínculo empresarial suficientemente verificável são apresentados. A Exa é tarifada por requisição e oferece US$ 10 em créditos mensais no plano gratuito, mais bônus inicial. O limite interno padrão de **400 pesquisas/mês e 5/min** é um **contador de requisições**, não um controle financeiro em dólares: configure também orçamento/alertas na Exa.
-- O OpenCNPJ identifica sócios e administradores, que nem sempre são gestores de RH. A origem de cada registro aparece na interface e na exportação XLSX.
-- Falhas de uma fonte não bloqueiam a outra. Não inventamos nomes, cargos ou vínculos profissionais.
-- Pessoas encontradas ficam apenas na memória da sessão de pesquisa, sem criação automática de leads. Observe a LGPD e os termos de licença dos fornecedores.
+- **OpenCNPJ** (sem chave): consulta o QSA pelo CNPJ completo. Sócios e administradores são exibidos com sua qualificação, sem confundi-los com gestores de RH.
+- **Exa** (`EXA_API_KEY`): busca perfis públicos de RH, benefícios e diretoria a partir do nome empresarial, com validação do vínculo. Usa créditos monetários de acordo com o plano da conta.
+- **Apollo** (`APOLLO_API_KEY`): usa o endpoint People API Search com domínio empresarial confirmado pelo Hunter Domain Finder, sem exigir que o usuário forneça o site. A chamada não consome créditos Apollo, mas exige permissão para `api/v1/mixed_people/api_search` e conta elegível. O sobrenome pode vir parcialmente oculto.
+- **Hunter** (`HUNTER_API_KEY`): tenta descobrir o domínio corporativo pelo Domain Finder (sem créditos), com correspondência rigorosa por nome de empresa. Quando não foi identificado um profissional completo de RH/Benefícios nas outras fontes, consulta o Domain Search com até 10 contatos por chamada (pode consumir créditos). A aplicação não armazena e-mails ou telefones pessoais retornados.
 
-Obtenha a chave em https://dashboard.exa.ai/ e configure EXA_API_KEY no .env.local e nas variáveis de ambiente da Vercel. OpenCNPJ é público e não exige chave. As credenciais APOLLO_API_KEY e HUNTER_API_KEY não são mais utilizadas e podem ser retiradas do ambiente.
+As consultas são independentes e protegidas pelos limites administrativos: OpenCNPJ 3.000/mês, Exa 400/mês, Apollo 300/mês, Hunter Domain Finder 300/mês, Hunter Domain Search 40/mês como tetos internos iniciais. Eles não representam franquias oficiais. Se uma API falhar ou não possuir credencial, a busca empresarial e as outras integrações continuam funcionando. Sem uma correspondência segura de domínio o Apollo não pesquisa empresas homônimas.
 
-Após atualizar o código, execute novamente a migração: ela criará os limites de Exa e OpenCNPJ e retirará os registros antigos de cotas Apollo/Hunter, preservando histórico de consumo e auditoria.
+**Colocação correta das credenciais:** o arquivo `.env.example` é apenas um modelo e é versionado no GitHub. Edite o arquivo **`.env.local`** na raiz do projeto e adicione:
 
+```dotenv
+EXA_API_KEY="SUA_CHAVE_EXA"
+APOLLO_API_KEY="SUA_CHAVE_APOLLO"
+HUNTER_API_KEY="SUA_CHAVE_HUNTER"
+```
+
+Preserve no `.env.local` o `DATABASE_URL` e as outras chaves já configuradas. Reinicie `npm run dev` após alterar variáveis. Na Vercel, cadastre-as manualmente em **Project Settings → Environment Variables**.
+
+Se você já colocou chaves reais no `.env.example`, apague-as desse arquivo e **não envie ao GitHub**. Se alguma chave já tiver sido publicada, revogue-a no provedor e gere outra; retirar apenas do commit mais recente não impede o acesso à credencial no histórico.
+
+Após atualizar o código, execute `node --env-file=.env.local scripts/migrate.mjs` para recriar as configurações de Apollo/Hunter. A migração é idempotente, preserva limites editados no painel e não precisa ser executada novamente em cada acesso. Contatos de gestores não são salvos automaticamente no CRM; exportação XLSX depende dos resultados obtidos e dos termos/LGPD.
 ### Paginação e contagem dos resultados (10 por página)
 
 A pesquisa apresenta **10 empresas por página**, com navegação **Anterior/Próxima**. Páginas já consultadas ficam em memória no navegador para retornar sem consumir a API novamente. Quando uma página ainda não foi carregada, a aplicação continua a paginação por cursor, conciliando matrizes/filiais e evitando duplicação por CNPJ. A exportação usa **todos os resultados carregados**, não apenas a página visível. A identificação automática de gestores ocorre para as empresas da página aberta, economizando créditos.

@@ -151,11 +151,11 @@ export default function Pesquisa(){
        <p className="prospect-manager-error" role="status">{peopleByRoot[item.cnpjRoot]?.error||'Não foi possível consultar os gestores.'}</p>:
       (peopleByRoot[item.cnpjRoot]?.result?.people.length||0)>0?
        <div className="prospect-person-list">{peopleByRoot[item.cnpjRoot]?.result?.people.map((person,i)=><div className="prospect-person" key={person.source+person.name+i}>
-        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small><small>{person.source==='exa'?'Perfil profissional · Exa':'Quadro societário · OpenCNPJ'}</small></div>
+        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small><small>{({exa:'Perfil profissional · Exa',opencnpj:'Quadro societário · OpenCNPJ',apollo:'Perfil profissional · Apollo',hunter:'Contato profissional · Hunter'} as const)[person.source]}</small></div>
        </div>)}</div>:
        <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável para esta empresa.</p>}
-     {peopleByRoot[item.cnpjRoot]?.result?.statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{s.provider==='exa'?'Exa':'OpenCNPJ'}: {s.message}</p>)}
-     <p className="prospect-manager-note">Busca automática por CNPJ (sócios/administradores) e perfis profissionais (RH e direção). A Exa utiliza créditos conforme o seu plano.</p>
+     {peopleByRoot[item.cnpjRoot]?.result?.statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{({exa:'Exa',opencnpj:'OpenCNPJ',apollo:'Apollo',hunter:'Hunter'} as const)[s.provider]}: {s.message}</p>)}
+     <p className="prospect-manager-note">Busca automática com OpenCNPJ, Exa, Apollo e Hunter. Consultas Hunter podem consumir créditos, dentro dos limites configurados.</p>
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}

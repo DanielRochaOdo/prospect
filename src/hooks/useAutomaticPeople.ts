@@ -4,7 +4,7 @@ import {post} from '@/lib/client';
 import type {CompanyResult} from '@/services/providers';
 import type {DecisionMaker} from '@/lib/people';
 
-type PeopleResult={people:DecisionMaker[];statuses:{provider:'opencnpj'|'exa';state:'ok'|'error'|'skipped';message:string}[]};
+type PeopleResult={people:DecisionMaker[];statuses:{provider:'opencnpj'|'exa'|'apollo'|'hunter';state:'ok'|'error'|'skipped';message:string}[]};
 export type PeopleLookup={state:'loading'|'ready'|'error';result?:PeopleResult;error?:string};
 type Job={root:string;cnpj:string;companyName:string;tradeName:string|null};
 const WAIT_BETWEEN_LOOKUPS_MS=13000;

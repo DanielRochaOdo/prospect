@@ -187,14 +187,15 @@ INSERT INTO segments(name,search_term,cnae) VALUES
  ('Alimentação','alimentação',NULL)
 ON CONFLICT (name) DO NOTHING;
 
--- Substituição de integrações de gestores. Preserva o histórico de uso e auditoria,
--- mas retira as configurações antigas Apollo/Hunter da plataforma.
--- statement
-DELETE FROM api_limits WHERE provider IN ('apollo','hunter');
+-- Quatro provedores complementares de gestores, com cotas idempotentes.
+-- Preserva limites personalizados configurados pelo administrador.
 -- statement
 INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
  ('opencnpj','qsa',3000,120),
- ('exa','people_search',400,5)
+ ('exa','people_search',400,5),
+ ('apollo','people_search',300,5),
+ ('hunter','domain_finder',300,10),
+ ('hunter','domain_search',40,5)
 ON CONFLICT DO NOTHING;
 
 -- Atualização idempotente dos limites inicialmente fornecidos no app.

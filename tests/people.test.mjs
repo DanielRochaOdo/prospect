@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mapOpenCnpjPeople,mapExaPeople,mergeDecisionMakers,organizationMatches} from '../src/lib/people.ts';
+import {mapOpenCnpjPeople,mapExaPeople,mapApolloPeople,mapHunterPeople,mergeDecisionMakers,organizationMatches,validCorporateDomain} from '../src/lib/people.ts';
 import {buildXlsx} from '../src/lib/xlsx.ts';
 test('OpenCNPJ associa QSA somente ao CNPJ idêntico',()=>{
  const data={success:true,data:{cnpj:'00000000000191',razaoSocial:'BANCO DO BRASIL SA',
@@ -30,4 +30,28 @@ test('Dois fornecedores retornando mesma pessoa não geram duplicidade',()=>{
 test('XLSX real, CNPJ textual e sem fórmula',()=>{
  const file=buildXlsx([{name:'Empresas',headers:['CNPJ','Razão social'],rows:[['00000000000100','=123+1']]}]);
  assert.equal(file.subarray(0,2).toString(),'PK');assert.ok(file.length>1000);
+});
+
+test('Apollo gratuito aceita nome parcial, só com empregador correspondente',()=>{
+ const sample={people:[
+  {first_name:'Mariana',last_name_obfuscated:'Si***a',title:'Gerente de Recursos Humanos',organization:{name:'Acme Serviços'}},
+  {first_name:'Ana',last_name:'Pereira',title:'Diretora',organization:{name:'Outra Empresa'}}
+ ]};
+ const found=mapApolloPeople(sample,'Acme Serviços Ltda');
+ assert.equal(found.length,1);
+ assert.equal(found[0].source,'apollo');
+ assert.equal(found[0].partialName,true);
+});
+test('Hunter retorna nome/cargo sem expor e-mail e rejeita empresa incorreta',()=>{
+ const response={data:{organization:'Acme Serviços',emails:[
+  {first_name:'Mariana',last_name:'Silva',position:'Gerente de RH',type:'personal',value:'mariana@acme.com'},
+  {first_name:'Equipe',position:'Vendas',type:'generic'}
+ ]}};
+ const found=mapHunterPeople(response,'Acme Serviços Ltda',false);
+ assert.equal(found.length,1);
+ assert.equal(found[0].name,'Mariana Silva');
+ assert.equal(Object.hasOwn(found[0],'email'),false);
+ assert.equal(mapHunterPeople(response,'Outra Empresa',false).length,0);
+ assert.equal(validCorporateDomain('acme.com.br'),'acme.com.br');
+ assert.equal(validCorporateDomain('gmail.com'),null);
 });

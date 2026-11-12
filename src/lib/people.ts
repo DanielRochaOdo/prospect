@@ -1,5 +1,5 @@
 /** Gestores profissionais e responsáveis societários identificados por fontes diferentes. */
-export type PeopleProvider='exa'|'opencnpj';
+export type PeopleProvider='exa'|'opencnpj'|'apollo'|'hunter';
 export type DecisionMaker={
  name:string;role:string;organization:string;source:PeopleProvider;partialName:boolean;
 };
@@ -94,4 +94,44 @@ export function mergeDecisionMakers(people:DecisionMaker[],limit=8):DecisionMake
   if(out.length>=limit)break;
  }
  return out;
+}
+
+/** Apollo retorna nome parcial na busca gratuita; não adivinhar sobrenomes. */
+export function mapApolloPeople(payload:unknown,companyName:string,tradeName?:string|null):DecisionMaker[]{
+ const list=record(payload).people;
+ if(!Array.isArray(list))return [];
+ const aliases=[companyName,...(tradeName?[tradeName]:[])];
+ return list.flatMap(value=>{
+  const r=record(value),org=text(record(r.organization).name);
+  if(!org||!aliases.some(alias=>organizationMatches(alias,org)))return [];
+  const first=text(r.first_name),last=text(r.last_name),masked=text(r.last_name_obfuscated);
+  const name=text(r.name)||[first,last||masked].filter(Boolean).join(' ');
+  const role=text(r.title);
+  if(!name||!role)return [];
+  return [{name,role,organization:org,source:'apollo' as const,partialName:!last&&!text(r.name)}];
+ });
+}
+/** Hunter oferece nomes e cargos, mas associamos pessoas apenas a domínio
+ * confirmado ou nome empresarial devolvido compatível com a razão social. */
+export function mapHunterPeople(payload:unknown,companyName:string,trustedDomain:boolean,tradeName?:string|null):DecisionMaker[]{
+ const data=record(record(payload).data);
+ const org=text(data.organization);
+ const aliases=[companyName,...(tradeName?[tradeName]:[])];
+ if(!trustedDomain&&!aliases.some(alias=>organizationMatches(alias,org)))return [];
+ if(!Array.isArray(data.emails))return [];
+ return data.emails.flatMap(value=>{
+  const r=record(value);
+  if(r.type==='generic')return [];
+  const first=text(r.first_name),last=text(r.last_name),role=text(r.position);
+  const name=[first,last].filter(Boolean).join(' ');
+  if(!name||!role)return [];
+  return [{name,role,organization:org||companyName,source:'hunter' as const,partialName:!last}];
+ });
+}
+/** Um domínio de provedor genérico não deve vincular pessoas à empresa. */
+export function validCorporateDomain(input:string):string|null{
+ let domain=input.trim().toLowerCase().replace(/^https?:\/\/(?:www\.)?/,'').split('/')[0].replace(/^www\./,'');
+ if(!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(domain))return null;
+ if(/^(?:gmail|hotmail|outlook|yahoo|icloud|live|uol|bol)\./.test(domain))return null;
+ return domain;
 }

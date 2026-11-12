@@ -8,7 +8,7 @@ const company=z.object({
 const person=z.object({
  cnpj:z.string().max(36),name:z.string().trim().min(1).max(500),
  role:z.string().trim().min(1).max(500),organization:z.string().max(500).optional(),
- source:z.enum(['exa','opencnpj']),partialName:z.boolean().default(false)
+ source:z.enum(['exa','opencnpj','apollo','hunter']),partialName:z.boolean().default(false)
 });
 const payload=z.object({companies:z.array(z.unknown()).max(300),people:z.array(z.unknown()).max(1500).default([])});
 const doc=(s:string)=>s.toUpperCase().replace(/[^0-9A-Z]/g,'');
