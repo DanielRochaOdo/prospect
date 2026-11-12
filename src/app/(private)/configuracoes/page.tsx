@@ -3,20 +3,22 @@
 import {useEffect, useMemo, useState} from 'react';
 import {
   AlertTriangle, ArrowUpRight, Building2, Cloud, Gauge, Info,
-  Network, Save, ShieldCheck
+  Network, Save, ShieldCheck, UsersRound, ContactRound
 } from 'lucide-react';
 import {apiRequest, patch, post} from '@/lib/client';
 
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
-type Provider='cnpjai'|'localiza'|'google';
-type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
+type Provider='cnpjai'|'localiza'|'google'|'apollo'|'hunter';
+type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'domain_finder'|'domain_search';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
 
 const providerInfo=[
   {id:'cnpjai' as const,name:'CNPJ.ai',subtitle:'Consulta de CNPJ, matrizes e filiais',summary:'Sem cota mensal publicada · 60 chamadas/min por conta, compartilhadas',url:'https://cnpj.ai/api/docs',icon:Network,tag:'Gratuito'},
   {id:'localiza' as const,name:'LocalizaCNPJ',subtitle:'Busca por segmento, CNAE e localização',summary:'Plano Free: 2.000 consultas/mês · 40 chamadas/min',url:'https://localizacnpj.com.br/portal-api',icon:Building2,tag:'Plano Free'},
+  {id:'apollo' as const,name:'Apollo',subtitle:'Identificação de gestores e cargos',summary:'Busca de pessoas: 0 créditos por consulta (conta gratuita corporativa elegível). Teto interno de 300 consultas/mês e 5/min.',url:'https://docs.apollo.io/reference/people-api-search',icon:UsersRound,tag:'Sem créditos'},
+  {id:'hunter' as const,name:'Hunter',subtitle:'Pesquisa de nomes completos e cargos por empresa',summary:'Free: 50 créditos/mês. Domain Finder gratuito; Domain Search pode consumir até 1 crédito com 10 resultados. Trava interna de 40/mês.',url:'https://hunter.io/api-documentation/v2/',icon:ContactRound,tag:'50 créditos/mês'},
   {id:'google' as const,name:'Google Places',subtitle:'Pesquisa contextual de estabelecimentos',summary:'Text Search Pro: 5.000/mês; com telefone (Enterprise): 1.000/mês. Os limites por minuto são controles internos.',url:'https://developers.google.com/maps/billing-and-pricing/pricing',icon:Cloud,tag:'Pro + Enterprise'},
 ];
-const operationName:Record<Limit['operation'],string>={basic:'Consulta básica',branches:'Matrizes e filiais',search:'Pesquisa de empresas',text_pro:'Pesquisa por texto (sem telefone)',text_enterprise:'Pesquisa contextual com telefone'};
+const operationName:Record<Limit['operation'],string>={basic:'Consulta básica',branches:'Matrizes e filiais',search:'Pesquisa de empresas',text_pro:'Pesquisa por texto (sem telefone)',text_enterprise:'Pesquisa contextual com telefone',people_search:'Pesquisa de gestores',domain_finder:'Localizar domínio',domain_search:'Busca de contatos e cargos'};
 const formatNumber=(value:number)=>value.toLocaleString('pt-BR');
 const keyOf=(l:Limit)=>`${l.provider}:${l.operation}`;
 function equalLimit(a:Limit,b:Limit){return a.monthly_limit===b.monthly_limit && a.minute_limit===b.minute_limit && a.enabled===b.enabled;}
@@ -124,6 +126,6 @@ export default function Configuracoes(){
     </section>
 
     <section className="panel section-space"><h2 className="panel-title">Segmentos disponíveis na pesquisa</h2><p className="panel-subtitle">Categorias de acesso rápido com termos e CNAEs.</p><form onSubmit={createSegment}><div className="fields-grid"><label>Categoria<input value={segName} onChange={e=>setSegName(e.target.value)} required placeholder="Clínicas odontológicas"/></label><label>Termo de busca<input value={segTerm} onChange={e=>setSegTerm(e.target.value)} required placeholder="atividade odontológica"/></label><label>CNAE (opcional)<input maxLength={7} value={segCnae} onChange={e=>setSegCnae(e.target.value.replace(/\D/g,''))} placeholder="8630504"/></label></div><div className="form-foot"><button type="submit" className="btn primary"><Save size={14}/>Adicionar segmento</button></div></form><div className="table-wrapper section-space"><table className="data-table"><thead><tr><th>Categoria</th><th>Termo</th><th>CNAE</th><th>Status</th><th>Ação</th></tr></thead><tbody>{segments.map(s=><tr key={s.id}><td>{s.name}</td><td>{s.search_term}</td><td>{s.cnae||'—'}</td><td>{s.active?'Ativo':'Inativo'}</td><td><div className="result-actions"><button className="btn small outline" onClick={()=>toggleSegment(s)}>{s.active?'Desativar':'Ativar'}</button><button className="btn small danger" onClick={()=>removeSegment(s.id)}>Excluir</button></div></td></tr>)}</tbody></table></div></section>
-    <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY e GOOGLE_PLACES_API_KEY nas variáveis de ambiente. Consulte o README para as etapas de deploy.</div></section>
+    <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY, GOOGLE_PLACES_API_KEY, APOLLO_API_KEY e HUNTER_API_KEY nas variáveis de ambiente. Consulte o README para as etapas de deploy.</div></section>
   </>;
 }

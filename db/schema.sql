@@ -187,6 +187,15 @@ INSERT INTO segments(name,search_term,cnae) VALUES
  ('Alimentação','alimentação',NULL)
 ON CONFLICT (name) DO NOTHING;
 
+-- Busca gratuita de gestores: Apollo sem créditos. Hunter Domain Finder gratuito;
+-- Domain Search com no máximo 10 contatos por chamada, teto interno conservador.
+-- statement
+INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
+ ('apollo','people_search',300,5),
+ ('hunter','domain_finder',300,10),
+ ('hunter','domain_search',40,5)
+ON CONFLICT DO NOTHING;
+
 -- Atualização idempotente dos limites inicialmente fornecidos no app.
 -- Não sobrescrever edições administrativas registradas na auditoria.
 -- statement

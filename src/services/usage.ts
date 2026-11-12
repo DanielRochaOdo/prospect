@@ -2,8 +2,8 @@ import {db} from '@/lib/db';
 import {AppError} from '@/lib/errors';
 import type {User} from '@/lib/auth';
 
-export type Provider='cnpjai'|'localiza'|'google';
-export type Operation='basic'|'branches'|'search'|'text_pro'|'text_enterprise';
+export type Provider='cnpjai'|'localiza'|'google'|'apollo'|'hunter';
+export type Operation='basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'domain_finder'|'domain_search';
 export function periods(date=new Date()){
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(date);
  const v=Object.fromEntries(parts.map(x=>[x.type,x.value]));

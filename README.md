@@ -97,6 +97,23 @@ Os setores são atalhos de pesquisa e **não restringem o uso do sistema**: o us
 
 Ao rodar `node --env-file=.env.local scripts/migrate.mjs` após atualizar o código, a migração remove somente os cinco segmentos odontológicos do *seed* antigo que permaneçam com nome, termo, CNAE e status originais. Segmentos personalizados são preservados. Os novos setores são incluídos apenas quando ainda não existirem.
 
+
+### Pesquisa de gestores (Apollo e Hunter)
+
+A tela **Pesquisar empresas** inclui a ação **Encontrar gestores** em cada cartão empresarial, sem mudar de aba. Cada ação consulta as integrações configuradas e destaca profissionais de RH, Benefícios, Administração e Diretoria.
+
+1. Crie uma API key Apollo com permissão para **People API Search** e cadastre `APOLLO_API_KEY` no ambiente local e na Vercel. A pesquisa não consome créditos Apollo, mas exige uma conta elegível (Free geralmente com e-mail profissional). O retorno pode ocultar parte do sobrenome e não inclui e-mails ou telefones: isso será sinalizado na interface.
+2. Crie uma chave Hunter e cadastre `HUNTER_API_KEY`. O **Domain Finder** busca o domínio corporativo sem consumir créditos; o **Domain Search** (até 10 contatos por chamada) utiliza créditos da franquia gratuita, por isso começa com teto interno de 40 chamadas/mês e 5/min. O plano Free publica 50 créditos/mês; outras consultas feitas na própria Hunter também podem gastar esses créditos.
+3. Quando um nome empresarial não puder ser relacionado com segurança ao domínio, o usuário pode informar o **site corporativo** no cartão antes da consulta. Não fazemos associação por nomes semelhantes sem validação.
+4. As consultas ocorrem **sob demanda** para não esgotar a cota gratuita ao pesquisar dezenas de empresas. A identificação de gestores não depende de possuir telefone ou e-mail pessoal; o telefone corporativo continua visível no cartão da empresa.
+
+### Exportação XLSX dos resultados
+
+O botão **Exportar XLSX** aparece na mesma página após a pesquisa. Ele gera um XLSX verdadeiro contendo as planilhas **Empresas** (CNPJ, razão social, endereço, setor, telefones corporativos etc.) e **Gestores** (nomes, cargos, empresa, fonte e eventual indicação de nome parcial). Só exporta empresas exibidas/carregadas e pessoas consultadas durante a sessão. A opção não faz consultas adicionais nem utiliza créditos; para exportar mais resultados, carregue as demais páginas.
+
+Conteúdo do Google Maps **não** integra o XLSX. O servidor verifica autenticação, formato e quantidade de linhas, preserva CNPJ como texto e não interpreta valores da planilha como fórmulas. Observe os termos e limites de exportação de cada fornecedor e a LGPD.
+
+
 ## Endpoints internos
 
 | Método e rota | Função |

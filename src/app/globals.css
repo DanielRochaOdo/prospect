@@ -88,6 +88,24 @@ html[data-theme="dark"]{
 @media(prefers-reduced-motion:reduce){.theme-toggle-track,.theme-toggle-knob,.quota-progress>span{transition:none}}
 
 .quota-stat-total{font-size:13px;color:var(--muted);letter-spacing:0;font-weight:650}
+.prospect-managers{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--surface);margin-top:16px;width:100%}
+.prospect-managers-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-size:13px;color:var(--ink)}
+.prospect-managers-head svg{color:var(--blue)}
+.prospect-managers-head .muted-small{margin-left:auto;font-size:11px}
+.prospect-managers-actions{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:12px}
+.prospect-managers-actions input{min-height:36px;height:36px;width:min(290px,100%);font-size:12px}
+.prospect-managers-actions button{min-height:36px}
+.prospect-person-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:9px;margin-top:13px}
+.prospect-person{display:flex;gap:9px;align-items:start;border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--bg)}
+.prospect-person-avatar{display:grid;place-items:center;height:32px;width:32px;border-radius:50%;background:var(--blue2);color:var(--blue);flex:0 0 32px}
+.prospect-person strong,.prospect-person small{display:block;overflow-wrap:anywhere}
+.prospect-person strong{font-size:12px;color:var(--ink)}
+.prospect-person small{font-size:11px;color:var(--muted);margin-top:3px}
+.prospect-manager-error{color:var(--red);font-size:11px;margin-top:9px;margin-bottom:0}
+.prospect-manager-note{font-size:11px;color:var(--muted);margin:11px 0 0}
+.prospect-result-overview>.btn{margin-left:8px}
+@media(max-width:740px){.prospect-result-overview>.btn{width:100%;margin-left:0}.prospect-managers-head .muted-small{margin-left:0}.prospect-managers-actions input{width:100%}}
+
 
 /* Pesquisa única: campos, resultados e contatos com prioridade visual. */
 .prospect-search-panel{padding:26px}.prospect-search-heading{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:17px}.prospect-search-heading svg{color:var(--blue)}
