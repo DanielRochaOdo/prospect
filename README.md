@@ -108,9 +108,15 @@ A interface exibe **Pesquisando gestores...**, os nomes encontrados, ou informa 
 
 Cadastre \`APOLLO_API_KEY\` e \`HUNTER_API_KEY\` exclusivamente nas variáveis de ambiente locais e da Vercel. Caso uma integração não esteja configurada ou atinja o limite, a busca cadastral continua operacional e informa a disponibilidade dos gestores.
 
+### Paginação e contagem dos resultados (10 por página)
+
+A pesquisa apresenta **10 empresas por página**, com navegação **Anterior/Próxima**. Páginas já consultadas ficam em memória no navegador para retornar sem consumir a API novamente. Quando uma página ainda não foi carregada, a aplicação continua a paginação por cursor, conciliando matrizes/filiais e evitando duplicação por CNPJ. A exportação usa **todos os resultados carregados**, não apenas a página visível. A identificação automática de gestores ocorre para as empresas da página aberta, economizando créditos.
+
+A LocalizaCNPJ **não fornece total de correspondências** no endpoint de filtros. Por isso, enquanto houver cursor ou erro em algum fornecedor, o painel apresenta **"Pelo menos N empresas encontradas"**, sendo N os registros únicos já carregados. Após percorrer todas as páginas sem erro, o painel exibe **"N empresas encontradas"** como total efetivo. Isso evita confundir 10 itens de uma página com o total da pesquisa. Páginas adicionais dos fornecedores consomem as respectivas cotas.
+
 ### Exportação XLSX dos resultados
 
-O botão **Exportar XLSX** aparece na mesma página após a pesquisa. Ele gera um XLSX verdadeiro contendo as planilhas **Empresas** (CNPJ, razão social, endereço, setor, telefones corporativos etc.) e **Gestores** (nomes, cargos, empresa, fonte e eventual indicação de nome parcial). Só exporta empresas exibidas/carregadas e pessoas consultadas durante a sessão. A opção não faz consultas adicionais nem utiliza créditos; para exportar mais resultados, carregue as demais páginas.
+O botão **Exportar XLSX** aparece na mesma página após a pesquisa. Ele gera um XLSX verdadeiro contendo as planilhas **Empresas** (CNPJ, razão social, endereço, setor, telefones corporativos etc.) e **Gestores** (nomes, cargos, empresa, fonte e eventual indicação de nome parcial). Exporta todas as empresas carregadas, mesmo as que não aparecem na página atual, e os gestores identificados automaticamente na sessão. A opção não faz consultas adicionais nem utiliza créditos; para exportar mais resultados, carregue as demais páginas.
 
 Conteúdo do Google Maps **não** integra o XLSX. O servidor verifica autenticação, formato e quantidade de linhas, preserva CNPJ como texto e não interpreta valores da planilha como fórmulas. Observe os termos e limites de exportação de cada fornecedor e a LGPD.
 
@@ -179,3 +185,8 @@ npm run dev
 ```
 
 **Migração necessária:** o script idempotente cria a nova linha `google/text_enterprise` em `api_limits` sem sobrescrever outros limites definidos manualmente. Preferir conexão **direta** do Neon durante a migração e **pooled** para o runtime. Verifique os contadores em Configurações e efetue uma busca real para homologar os acessos e a interpretação do retorno de cada provedor.
+
+
+### Correção do erro HTTP 400 no XLSX
+
+A exportação valida apenas o mínimo necessário para gerar a planilha (CNPJ com 14 posições, nome opcional e fonte cadastral permitida), sem exigir que campos públicos como e-mail satisfaçam as regras rígidas do cadastro de leads. Registros isolados incompletos não derrubam a exportação dos demais. O endpoint aceita somente dados cadastrais, não dados do Google Maps, e preserva o CNPJ como texto.
