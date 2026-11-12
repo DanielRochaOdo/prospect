@@ -39,5 +39,5 @@ export function checkOrigin(request:Request){
  if(!accepted.has(new URL(origin).host)) throw new AppError(403,'Origem não autorizada.');
 }
 export async function audit(userId:string|null,action:string,type:string,id?:string,details:Record<string,unknown>={}){
- await db()`INSERT INTO audit_logs(user_id,action,subject_type,subject_id,details) VALUES (${userId},${action},${type},${id??null},${db().json(details)})`;
+ await db()`INSERT INTO audit_logs(user_id,action,subject_type,subject_id,details) VALUES (${userId},${action},${type},${id??null},${JSON.stringify(details)}::jsonb)`;
 }
