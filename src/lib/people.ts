@@ -50,7 +50,7 @@ function companyIsInCurrentRole(profile:string,companyNames:string[]):boolean{
  const aliases=companyNames.map(tokens).filter(t=>t.length);
  for(const line of relevant){
   const words=normalize(line).split(' ');
-  const verified=aliases.some(t=>t.length===1?t[0].length>=5&&words.includes(t[0]):t.filter(x=>words.includes(x)).length>=2);
+  const verified=aliases.some(t=>t.length===1?t[0].length>=4&&words.includes(t[0]):t.filter(x=>words.includes(x)).length>=2);
   if(!verified||!roles.test(line))continue;
   // Aceita apenas linha que apresenta cargo associado à empresa; histórico
   // explicitamente antigo não é tratado como emprego atual.
