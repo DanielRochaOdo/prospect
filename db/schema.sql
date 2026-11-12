@@ -49,6 +49,10 @@ INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
  ('localiza','search',2000,40),('google','text_pro',5000,20)
 ON CONFLICT DO NOTHING;
 -- statement
+INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
+ ('google','text_enterprise',1000,10)
+ON CONFLICT DO NOTHING;
+-- statement
 CREATE TABLE IF NOT EXISTS api_usage (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id uuid REFERENCES users(id) ON DELETE SET NULL,

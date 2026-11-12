@@ -1,6 +1,6 @@
 # Prospect Odontoart
 
-Aplicação web de prospecção comercial B2B, com autenticação privada, pesquisa por CNPJ completo/raiz (matrizes e filiais), pesquisa por CNAE/segmento/cidade, consulta contextual ao Google Places, gestão de leads, dashboard, histórico e cotas configuráveis de APIs.
+Aplicação web de prospecção comercial B2B, com autenticação privada, pesquisa única por CNPJ completo/raiz (matrizes e filiais), CNAE, nome, segmento e localização, consulta contextual ao Google Places, gestão de leads, dashboard, histórico e cotas configuráveis de APIs.
 
 ## Arquitetura
 
@@ -134,3 +134,22 @@ Os testes unitários incluídos validam CNPJ completo, raiz, prefixos, caractere
 - Recuperação de senha é **via administrador** nesta versão, sem envio automático de e-mail.
 - O contador interno previne excedentes, mas não substitui limites de faturamento no Google Cloud.
 - Não há integração automática com GitHub/Vercel/Neon; as credenciais e vinculações são configuradas pelo responsável.
+
+
+## Pesquisa única e obtenção de contatos
+
+A tela **Pesquisar empresas** agora tem um só formulário: nome, segmento, categoria, CNAE, cidade, UF, bairro e CNPJ (completo, raiz ou prefixo). O servidor consulta automaticamente as fontes compatíveis e faz enriquecimento cadastral de até **5 empresas por página** pela cnpj.ai, sem exigir que o usuário escolha o fornecedor. Registros de mesma pessoa jurídica/estabelecimento são combinados por **CNPJ completo**, preservando matriz/filiais e priorizando telefones existentes nos dados públicos. Quando nenhum telefone é fornecido, a tela mostra "Não informado"; não é possível garantir telefone para 100% das empresas.
+
+O Google Places é acionado para consulta contextual quando há nome ou segmento pesquisável. A aplicação solicita `places.nationalPhoneNumber`/`internationalPhoneNumber`, o que aciona a **SKU Text Search Enterprise** (franquia gratuita atual: 1.000 requisições/mês) e usa a operação `google/text_enterprise`, com limite interno padrão de 1.000/mês e 10/min. O painel de configurações permite limitar ou desativar esta integração independentemente da busca cadastral. **Importante:** dados exibidos pelo Google não são combinados com a base cadastral nem inseridos em CRM, armazenados ou exportados; os termos do Google Maps restringem expressamente esse uso em serviços de listagem/prospecção. Ver [termos](https://cloud.google.com/maps-platform/terms) e [campos/tarifas](https://developers.google.com/maps/documentation/places/web-service/data-fields).
+
+O mecanismo não faz chamadas à cnpj.ai sem um CNPJ conhecido: na busca por segmento, primeiro consulta a LocalizaCNPJ e depois busca informações para uma amostra limitada de CNPJs retornados. Em uma busca só pela raiz de CNPJ, consulta as duas fontes cadastrais e usa o nome cadastral para a consulta contextual, quando disponível. Falhas parciais são relatadas na interface e não fazem desaparecer dados já recebidos.
+
+### Após atualizar o repositório local
+
+```bash
+git pull origin main
+node --env-file=.env.local scripts/migrate.mjs
+npm run dev
+```
+
+**Migração necessária:** o script idempotente cria a nova linha `google/text_enterprise` em `api_limits` sem sobrescrever outros limites definidos manualmente. Preferir conexão **direta** do Neon durante a migração e **pooled** para o runtime. Verifique os contadores em Configurações e efetue uma busca real para homologar os acessos e a interpretação do retorno de cada provedor.

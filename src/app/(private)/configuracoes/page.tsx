@@ -9,14 +9,14 @@ import {apiRequest, patch, post} from '@/lib/client';
 
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
 type Provider='cnpjai'|'localiza'|'google';
-type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
+type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
 
 const providerInfo=[
   {id:'cnpjai' as const,name:'CNPJ.ai',subtitle:'Consulta de CNPJ, matrizes e filiais',summary:'Sem cota mensal publicada · 60 chamadas/min por conta, compartilhadas',url:'https://cnpj.ai/api/docs',icon:Network,tag:'Gratuito'},
   {id:'localiza' as const,name:'LocalizaCNPJ',subtitle:'Busca por segmento, CNAE e localização',summary:'Plano Free: 2.000 consultas/mês · 40 chamadas/min',url:'https://localizacnpj.com.br/portal-api',icon:Building2,tag:'Plano Free'},
-  {id:'google' as const,name:'Google Places',subtitle:'Pesquisa contextual de estabelecimentos',summary:'Text Search Pro: 5.000 eventos gratuitos/mês · limite por minuto definido no Google Cloud',url:'https://developers.google.com/maps/billing-and-pricing/pricing',icon:Cloud,tag:'Text Search Pro'},
+  {id:'google' as const,name:'Google Places',subtitle:'Pesquisa contextual de estabelecimentos',summary:'Text Search Pro: 5.000/mês; com telefone (Enterprise): 1.000/mês. Os limites por minuto são controles internos.',url:'https://developers.google.com/maps/billing-and-pricing/pricing',icon:Cloud,tag:'Pro + Enterprise'},
 ];
-const operationName:Record<Limit['operation'],string>={basic:'Consulta básica',branches:'Matrizes e filiais',search:'Pesquisa de empresas',text_pro:'Pesquisa por texto'};
+const operationName:Record<Limit['operation'],string>={basic:'Consulta básica',branches:'Matrizes e filiais',search:'Pesquisa de empresas',text_pro:'Pesquisa por texto (sem telefone)',text_enterprise:'Pesquisa contextual com telefone'};
 const formatNumber=(value:number)=>value.toLocaleString('pt-BR');
 const keyOf=(l:Limit)=>`${l.provider}:${l.operation}`;
 function equalLimit(a:Limit,b:Limit){return a.monthly_limit===b.monthly_limit && a.minute_limit===b.minute_limit && a.enabled===b.enabled;}

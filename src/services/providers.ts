@@ -12,10 +12,15 @@ export type CompanyResult={
  city:string|null;state:string|null;district:string|null;address:string|null;postalCode:string|null;
  phone:string|null;email:string|null;source:'cnpjai'|'localiza';
 };
-export type PlaceResult={id:string;name:string;address:string;mapsUrl:string};
+export type PlaceResult={id:string;name:string;address:string;mapsUrl:string;phone:string|null};
 const str=(value:unknown):string|null=>typeof value==='string'&&value.trim()?value.trim():null;
 const address=(r:Record<string,unknown>)=>[str(r.tipo_logradouro),str(r.logradouro),str(r.numero),str(r.complemento)].filter(Boolean).join(' ')||null;
-const phone=(r:Record<string,unknown>)=>r.telefone1?`${str(r.ddd1)||''} ${str(r.telefone1)||''}`.trim():null;
+const phone=(r:Record<string,unknown>)=>{
+ const raw=str(r.telefone1)??str(r.telefone_1)??str(r.numero_telefone_1)??str(r.telefone2)??str(r.telefone);
+ if(!raw)return null;
+ const area=str(r.ddd1)??str(r.ddd_telefone_1)??str(r.ddd2);
+ return [area,raw].filter(Boolean).join(' ');
+};
 const object=(input:unknown):Record<string,unknown>=>input&&typeof input==='object'&&!Array.isArray(input)?input as Record<string,unknown>:{};
 export function mapCompany(input:unknown,source:'cnpjai'|'localiza',companyInput?:unknown):CompanyResult|null{
  const r=object(input), c=object(companyInput??r.empresa);
@@ -93,12 +98,12 @@ export async function searchGoogle(query:Search,user:User){
  const key=apiKey('GOOGLE_PLACES_API_KEY');
  if(!query.segment&&!query.name)throw new AppError(400,'Informe segmento ou nome do local.');
  const text=[query.name,query.segment,query.district,query.city,query.state,'Brasil'].filter(Boolean).join(', ');
- const result=object(await providerFetch('google','text_pro',user,'https://places.googleapis.com/v1/places:searchText',{
-  method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.googleMapsUri,nextPageToken'},
+ const result=object(await providerFetch('google','text_enterprise',user,'https://places.googleapis.com/v1/places:searchText',{
+  method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.googleMapsUri,places.nationalPhoneNumber,places.internationalPhoneNumber,nextPageToken'},
   body:JSON.stringify({textQuery:text,pageSize:Math.min(20,query.pageSize),languageCode:'pt-BR',regionCode:'BR',...(query.cursor?{pageToken:query.cursor}:{})})
  }));
  const items=(Array.isArray(result.places)?result.places:[]).map((v)=>{
-  const r=object(v), n=object(r.displayName);return {id:String(r.id||''),name:String(n.text||'Sem nome'),address:String(r.formattedAddress||''),mapsUrl:String(r.googleMapsUri||'')};
+  const r=object(v), n=object(r.displayName);return {id:String(r.id||''),name:String(n.text||'Sem nome'),address:String(r.formattedAddress||''),mapsUrl:String(r.googleMapsUri||''),phone:str(r.nationalPhoneNumber)??str(r.internationalPhoneNumber)};
  });
  return {items,nextCursor:str(result.nextPageToken),partial:!!result.nextPageToken};
 }

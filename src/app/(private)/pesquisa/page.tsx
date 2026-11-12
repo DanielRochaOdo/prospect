@@ -1,43 +1,106 @@
 'use client';
-import {useEffect,useState} from 'react';import Link from 'next/link';
-import {Search,MapPin,Building2,GitBranch,Phone,Mail,Globe,Plus,ArrowRight,Info,AlertTriangle,CheckCircle2,LoaderCircle} from 'lucide-react';
+
+import {useEffect,useMemo,useState} from 'react';
+import Link from 'next/link';
+import {Search,MapPin,Building2,Phone,Mail,Plus,ArrowRight,Info,AlertTriangle,LoaderCircle,CheckCircle2,ExternalLink,ShieldCheck} from 'lucide-react';
 import {apiRequest,post,formatCnpj} from '@/lib/client';
 import type {CompanyResult,PlaceResult} from '@/services/providers';
-type Source='cnpjai'|'localiza'|'google';
-type Query={source:Source;cnpj?:string;name?:string;segment?:string;cnae?:string;city?:string;state?:string;district?:string;activeOnly:boolean;branches:'all'|'headquarters'|'branches';pageSize:number;cursor?:string};
-type SearchResult={items:(CompanyResult|PlaceResult)[];nextCursor:string|null;partial:boolean;scanned?:number;snapshot?:string;source:Source};
-const tabs:{source:Source;label:string;icon:typeof Search;help:string}[]=[{source:'localiza',label:'Por segmento',icon:Search,help:'Encontre empresas por atividade, CNAE ou região.'},{source:'cnpjai',label:'CNPJ e filiais',icon:GitBranch,help:'Pesquise um CNPJ completo ou apenas os primeiros 8 caracteres.'},{source:'google',label:'Google Places',icon:MapPin,help:'Consulte lugares em tempo real, sem salvá-los como leads.'}];
+
+type Query={cnpj:string;name:string;segment:string;cnae:string;city:string;state:string;district:string;activeOnly:boolean;branches:'all'|'headquarters'|'branches';pageSize:number;cursor?:string};
+type Status={service:'cnpjai'|'localiza'|'google';state:'ok'|'error'|'skipped';message?:string};
+type SearchResult={items:CompanyResult[];places:PlaceResult[];nextCursor:string|null;partial:boolean;phoneCount:number;sourceStatus:Status[]};
+type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
+const empty:Query={cnpj:'',name:'',segment:'',cnae:'',city:'',state:'',district:'',activeOnly:true,branches:'all',pageSize:20};
+const statusName:Record<Status['service'],string>={cnpjai:'CNPJ.ai',localiza:'LocalizaCNPJ',google:'Google Places'};
+const normalizePhone=(s:string)=>s.replace(/[^\d+]/g,'');
+
 export default function Pesquisa(){
- const [segments,setSegments]=useState<{id:string;name:string;search_term:string;cnae:string|null;active:boolean}[]>([]);useEffect(()=>{apiRequest<{segments:typeof segments}>('/api/segments').then(d=>setSegments(d.segments.filter(x=>x.active))).catch(()=>{})},[]);
- const [source,setSource]=useState<Source>('localiza'),[cnpj,setCnpj]=useState(''),[name,setName]=useState(''),[segment,setSegment]=useState(''),[cnae,setCnae]=useState(''),[city,setCity]=useState(''),[state,setState]=useState(''),[district,setDistrict]=useState(''),[activeOnly,setActiveOnly]=useState(true),[branches,setBranches]=useState<'all'|'headquarters'|'branches'>('all');
- const [result,setResult]=useState<SearchResult|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[saved,setSaved]=useState<string[]>([]),[saving,setSaving]=useState(''),[previous,setPrevious]=useState<Query|null>(null),[notice,setNotice]=useState('');
- function swap(s:Source){setSource(s);setResult(null);setError('');setNotice('');}
- async function run(cursor?:string){
-  const query:Query=cursor&&previous?{...previous,cursor}:{source,cnpj,name,segment,cnae,city,state,district,activeOnly,branches,pageSize:20};
-  setLoading(true);setError('');setNotice('');
-  try{const r=await post('/api/search',query) as SearchResult;
-   if(cursor&&result){setResult({...r,items:[...result.items,...r.items]});}else{setResult(r);setSaved([]);setPrevious(query);}
-   if(r.partial)setNotice('Há mais resultados disponíveis. Continue a paginação para concluir a consulta.');
+ const [segments,setSegments]=useState<Segment[]>([]);
+ const [query,setQuery]=useState<Query>({...empty});
+ const [result,setResult]=useState<SearchResult|null>(null);
+ const [error,setError]=useState('');
+ const [loading,setLoading]=useState(false);
+ const [saved,setSaved]=useState<string[]>([]);
+ const [saving,setSaving]=useState('');
+ const [lastQuery,setLastQuery]=useState<Query|null>(null);
+ const [preferPhone,setPreferPhone]=useState(true);
+ useEffect(()=>{apiRequest<{segments:Segment[]}>('/api/segments').then(d=>setSegments(d.segments.filter(x=>x.active))).catch(()=>{});},[]);
+ const set=(name:keyof Query,value:string|boolean)=>setQuery(prev=>({...prev,[name]:value}));
+ const companies=useMemo(()=>{
+  const list=[...(result?.items||[])];
+  return preferPhone?list.sort((a,b)=>Number(!!b.phone)-Number(!!a.phone)):list;
+ },[result,preferPhone]);
+ async function run(next?:string){
+  const payload=next&&lastQuery?{...lastQuery,cursor:next}:{...query};
+  setLoading(true);setError('');
+  try{
+   const data=await post('/api/search',payload) as SearchResult;
+   if(next&&result){
+    const previous=new Map(result.items.map(i=>[i.cnpj,i]));
+    for(const item of data.items){
+      const old=previous.get(item.cnpj);
+      previous.set(item.cnpj,old?{...old,...Object.fromEntries(Object.entries(item).filter(([,v])=>v!==null&&v!==''))}:item);
+    }
+    const merged=[...previous.values()];
+    setResult({...data,items:merged,places:result.places,phoneCount:merged.filter(x=>!!x.phone).length,
+       sourceStatus:[...result.sourceStatus,...data.sourceStatus]});
+   }else{
+    setResult(data);setLastQuery({...query});setSaved([]);
+   }
   }catch(e){setError((e as Error).message);}finally{setLoading(false);}
  }
- async function save(item:CompanyResult){setSaving(item.cnpj);setError('');try{await post('/api/leads',{company:item,notes:''});setSaved(arr=>[...arr,item.cnpj]);}catch(e){setError((e as Error).message);}finally{setSaving('');}}
- const tab=tabs.find(t=>t.source===source)!;
- return <><div className="page-head"><div><span className="eyebrow">MOTOR DE PROSPECÇÃO</span><h1>Pesquisar empresas</h1><p>Três fontes de dados, cada uma com uma finalidade específica.</p></div><Link href="/leads" className="btn outline"><Building2 size={16}/>Meus leads</Link></div>
- <section className="panel"><div className="tabs">{tabs.map(t=><button className={`tab ${source===t.source?'active':''}`} type="button" key={t.source} onClick={()=>swap(t.source)}><t.icon size={15} style={{verticalAlign:'middle',marginRight:7}}/>{t.label}</button>)}</div><p className="panel-subtitle" style={{marginTop:0}}>{tab.help}</p>
- <form onSubmit={e=>{e.preventDefault();void run();}}>
-{source!=='cnpjai'&&<div className="fields-grid two" style={{marginBottom:17}}><label>Categoria rápida<select value="" onChange={e=>{const chosen=segments.find(x=>x.id===e.target.value);if(chosen){setSegment(source==='google'?chosen.name:chosen.search_term);setCnae(source==='google'?'':(chosen.cnae||''));}}}><option value="">Escolha um segmento ou digite abaixo</option>{segments.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label></div>}
- {source==='cnpjai'?<><div className="fields-grid two"><label>Raiz ou CNPJ completo<input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="Ex.: 03.187.913 ou 14 caracteres" required/></label><label>Tipo de estabelecimento<select value={branches} onChange={e=>setBranches(e.target.value as typeof branches)}><option value="all">Matrizes e filiais</option><option value="headquarters">Somente matrizes</option><option value="branches">Somente filiais</option></select></label></div><div className="field-help">Aceita 8 caracteres da raiz, prefixos entre 9–13 caracteres ou CNPJ completo de 14 caracteres. Para prefixos intermediários, pesquisa mais páginas até encontrar coincidências.</div></>:
- <div className="fields-grid"><label>{source==='google'?'Segmento ou tipo de negócio':'Segmento ou atividade'}<input value={segment} onChange={e=>setSegment(e.target.value)} placeholder="Ex.: clínicas odontológicas"/></label><label>Nome da empresa<input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome ou razão social"/></label>{source==='localiza'?<label>CNAE (opcional)<input value={cnae} onChange={e=>setCnae(e.target.value)} placeholder="Ex.: 8630504"/></label>:<label>Bairro (opcional)<input value={district} onChange={e=>setDistrict(e.target.value)} placeholder="Ex.: Aldeota"/></label>}<label>Cidade<input value={city} onChange={e=>setCity(e.target.value)} placeholder="Ex.: Fortaleza"/></label><label>Estado (UF)<input value={state} onChange={e=>setState(e.target.value.toUpperCase().slice(0,2))} placeholder="CE" maxLength={2}/></label>{source==='localiza'?<label>CNPJ ou raiz (opcional)<input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="8 ou 14 caracteres"/></label>:null}</div>}
- {source!=='google'&&<div style={{display:'flex',gap:18,marginTop:17,flexWrap:'wrap',alignItems:'center'}}><label style={{flexDirection:'row',alignItems:'center',gap:8}}><input style={{width:16,minHeight:16}} type="checkbox" checked={activeOnly} onChange={e=>setActiveOnly(e.target.checked)}/>Apenas empresas ativas</label></div>}
- <div className="filter-actions"><button disabled={loading} className="btn primary" type="submit">{loading?<LoaderCircle size={16}/>:<Search size={16}/>} {loading?'Pesquisando...':'Buscar empresas'} <ArrowRight size={15}/></button><button className="btn" type="button" onClick={()=>{setCnpj('');setSegment('');setName('');setCnae('');setCity('');setState('');setDistrict('');setResult(null);setError('');}}>Limpar filtros</button></div></form>
- {source==='google'&&<div className="search-notice"><Info size={14} style={{verticalAlign:'middle',marginRight:6}}/>Google Places é exibido para consulta contextual; seus resultados não são armazenados no CRM nem exportados. Dados provenientes do Google seguem os respectivos termos de uso.</div>}
- </section>
- {error&&<div className="alert error section-space"><AlertTriangle size={15} style={{verticalAlign:'middle'}}/> {error}</div>}
- {result&&<section className="section-space"><div className="search-summary"><strong>{result.items.length} {result.items.length===1?'resultado':'resultados'} exibidos</strong><span className="muted-small">Fonte: {tabs.find(t=>t.source===result.source)?.label}</span></div>{notice&&<div className="alert">{notice}</div>}
- {!result.items.length?<div className="panel empty"><Search size={30}/><h3>Nenhum resultado encontrado</h3><p>Experimente alterar os filtros ou consultar outra fonte.</p></div>:
- <div className="card-stack">{result.source==='google'?(result.items as PlaceResult[]).map((item,i)=><div key={`${item.id}-${i}`} className="result-card"><div><h3>{item.name}</h3><p>{item.address||'Endereço não informado'}</p><span className="badge">Resultado do Google Maps</span></div><div className="result-actions"><a className="btn small outline" href={item.mapsUrl||`https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(item.id)}`} target="_blank" rel="noopener noreferrer"><MapPin size={14}/>Ver no Maps</a></div></div>):(result.items as CompanyResult[]).map((item,i)=><div key={`${item.cnpj}-${i}`} className="result-card"><div><h3>{item.tradeName||item.legalName}</h3><p>{item.legalName!==item.tradeName?item.legalName:''}</p><div className="result-meta"><span><Building2 size={13}/>{formatCnpj(item.cnpj)}</span><span><MapPin size={13}/>{[item.city,item.state].filter(Boolean).join(' / ')||'Localização não informada'}</span><span><Phone size={13}/>{item.phone||'Sem telefone'}</span><span><Mail size={13}/>{item.email||'Sem e-mail'}</span><span className="badge">{item.isHeadquarters===true?'Matriz':item.isHeadquarters===false?'Filial':'Unidade'}</span></div></div><div className="result-actions"><button disabled={saved.includes(item.cnpj)||saving===item.cnpj} className="btn small primary" onClick={()=>save(item)}><Plus size={14}/>{saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div></div>)}</div>}
- {result.nextCursor&&<div className="form-foot"><button className="btn outline" disabled={loading} onClick={()=>run(result.nextCursor!)}>{loading?'Carregando...':'Carregar próxima página'}<ArrowRight size={14}/></button></div>}
- {result.source==='google'&&<p className="hint" style={{marginTop:15}}>Dados dos estabelecimentos fornecidos por Google Maps. © Google.</p>}
- </section>}
+ async function save(item:CompanyResult){
+  setSaving(item.cnpj);setError('');
+  try{await post('/api/leads',{company:item,notes:''});setSaved(arr=>[...arr,item.cnpj]);}
+  catch(e){setError((e as Error).message);}finally{setSaving('');}
+ }
+ const failures=Array.from(new Map(result?.sourceStatus.filter(s=>s.state==='error').map(s=>[s.service,s])||[]).values());
+ const phones=result?.items.filter(x=>!!x.phone).length||0;
+ return <>
+  <div className="page-head"><div><span className="eyebrow">PESQUISA EMPRESARIAL</span><h1>Encontrar empresas</h1><p>Pesquise pelo dado que você conhece. Os registros são complementados automaticamente.</p></div><Link href="/leads" className="btn outline"><Building2 size={16}/>Meus leads</Link></div>
+  <section className="panel prospect-search-panel">
+   <div className="prospect-search-heading"><div><h2 className="panel-title">O que você está procurando?</h2><p className="panel-subtitle">Preencha um ou mais campos. CNPJ pode ser completo ou apenas a raiz de 8 caracteres.</p></div><Search size={21} aria-hidden="true"/></div>
+   <form onSubmit={e=>{e.preventDefault();void run();}}>
+    <div className="prospect-filter-grid">
+     <label className="prospect-filter-wide">CNPJ ou raiz<input value={query.cnpj} onChange={e=>set('cnpj',e.target.value)} placeholder="Ex.: 03.187.913 ou 03.187.913/0001-00" autoComplete="off"/></label>
+     <label>Segmento rápido<select value="" onChange={e=>{const segment=segments.find(x=>x.id===e.target.value);if(segment)setQuery(q=>({...q,segment:segment.search_term,cnae:segment.cnae||''}));}}><option value="">Selecionar segmento</option>{segments.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+     <label>Nome da empresa<input value={query.name} onChange={e=>set('name',e.target.value)} placeholder="Razão social ou nome fantasia"/></label>
+     <label>Atividade ou segmento<input value={query.segment} onChange={e=>set('segment',e.target.value)} placeholder="Ex.: odontologia"/></label>
+     <label>CNAE<input value={query.cnae} onChange={e=>set('cnae',e.target.value.replace(/\D/g,'').slice(0,7))} placeholder="Ex.: 8630504"/></label>
+     <label>Cidade<input value={query.city} onChange={e=>set('city',e.target.value)} placeholder="Fortaleza"/></label>
+     <label>UF<input value={query.state} onChange={e=>set('state',e.target.value.toUpperCase().slice(0,2))} placeholder="CE" maxLength={2}/></label>
+     <label>Bairro<input value={query.district} onChange={e=>set('district',e.target.value)} placeholder="Aldeota"/></label>
+     <label>Estabelecimentos<select value={query.branches} onChange={e=>setQuery(q=>({...q,branches:e.target.value as Query['branches']}))}><option value="all">Matriz e filiais</option><option value="headquarters">Somente matrizes</option><option value="branches">Somente filiais</option></select></label>
+    </div>
+    <div className="prospect-search-actions">
+      <div className="prospect-filter-options">
+        <label><input type="checkbox" checked={query.activeOnly} onChange={e=>set('activeOnly',e.target.checked)}/>Apenas empresas ativas</label>
+        <label><input type="checkbox" checked={preferPhone} onChange={e=>setPreferPhone(e.target.checked)}/>Priorizar com telefone</label>
+      </div>
+      <div className="result-actions"><button type="button" className="btn" disabled={loading} onClick={()=>{setQuery({...empty});setResult(null);setLastQuery(null);setError('');}}>Limpar</button><button className="btn primary" disabled={loading} type="submit">{loading?<LoaderCircle size={16} className="prospect-spin"/>:<Search size={16}/>} {loading?'Consultando...':'Pesquisar empresas'}<ArrowRight size={15}/></button></div>
+    </div>
+   </form>
+   <div className="prospect-privacy-note"><ShieldCheck size={16}/><span>Contatos para o CRM vêm de fontes cadastrais. Informações do Google Maps, quando exibidas, são apenas para consulta pontual e não são armazenadas ou exportadas.</span></div>
+  </section>
+
+  {error&&<div className="alert error section-space" role="alert"><AlertTriangle size={16}/> {error}</div>}
+  {result&&<section className="section-space" aria-live="polite">
+   <div className="prospect-result-overview">
+    <div><span className="eyebrow">RESULTADOS</span><h2>{result.items.length.toLocaleString('pt-BR')} empresas encontradas</h2><p>{phones.toLocaleString('pt-BR')} com telefone informado pelas fontes cadastrais</p></div>
+    <div className="prospect-overview-metrics"><span><Phone size={17}/><strong>{phones}</strong> com telefone</span><span><Building2 size={17}/><strong>{result.items.length}</strong> empresas</span></div>
+   </div>
+   {failures.length>0&&<div className="alert section-space" role="status"><AlertTriangle size={15}/> Algumas consultas não foram concluídas: {failures.map(f=>`${statusName[f.service]} — ${f.message||'indisponível'}`).join(' • ')}. Os resultados obtidos permanecem disponíveis.</div>}
+   {!result.items.length&&<div className="panel empty section-space"><Search size={30}/><h3>Nenhuma empresa encontrada</h3><p>Tente ampliar a cidade, alterar o CNAE ou pesquisar a raiz do CNPJ.</p></div>}
+   {companies.length>0&&<div className="card-stack section-space">{companies.map(item=><article key={item.cnpj} className="result-card prospect-result-card"><div className="prospect-company-info"><div className="prospect-company-top"><h3>{item.tradeName||item.legalName}</h3><span className="badge gray">{item.isHeadquarters===true?'Matriz':item.isHeadquarters===false?'Filial':'Estabelecimento'}</span></div>{item.tradeName&&item.tradeName!==item.legalName&&<p>{item.legalName}</p>}
+    <div className="result-meta"><span><Building2 size={14}/>{formatCnpj(item.cnpj)}</span><span><MapPin size={14}/>{[item.city,item.state].filter(Boolean).join(' / ')||'Localização não informada'}</span></div>
+    <div className="prospect-contact-grid"><div className={`prospect-contact ${item.phone?'has-phone':''}`}><Phone size={16}/><div><small>TELEFONE</small>{item.phone?<a href={`tel:${normalizePhone(item.phone)}`}>{item.phone}</a>:<span>Não informado</span>}</div></div><div className="prospect-contact"><Mail size={16}/><div><small>E-MAIL</small>{item.email?<a href={`mailto:${item.email}`}>{item.email}</a>:<span>Não informado</span>}</div></div></div>
+    {item.address&&<p className="prospect-address">{item.address}</p>}
+    </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
+   </article>)}</div>}
+   {result.nextCursor&&<div className="form-foot"><button disabled={loading} className="btn outline" onClick={()=>run(result.nextCursor!)}>{loading?'Carregando...':'Carregar mais empresas'}<ArrowRight size={15}/></button></div>}
+
+   {result.places.length>0&&<section className="panel section-space" aria-labelledby="places-title"><div className="split-between"><div><h2 className="panel-title" id="places-title">Consulta contextual no Google Maps</h2><p className="panel-subtitle">Informações em tempo real para conferência individual; não entram nos leads nem na exportação.</p></div><span className="badge">© Google Maps</span></div><div className="prospect-places-grid">{result.places.map(p=><div className="prospect-place" key={p.id}><strong>{p.name}</strong><p>{p.address||'Endereço não informado'}</p><div className="prospect-place-footer"><span><Phone size={14}/>{p.phone||'Telefone não informado'}</span><a href={p.mapsUrl||`https://www.google.com/maps/place/?q=place_id:${encodeURIComponent(p.id)}`} target="_blank" rel="noopener noreferrer" aria-label={`Abrir ${p.name} no Google Maps`}>Abrir Maps <ExternalLink size={13}/></a></div></div>)}</div><p className="muted-small" style={{marginTop:12}}>O Google não disponibiliza CNPJ ou e-mail e pode não informar telefone. Exibir telefones requer a modalidade Enterprise da Places API.</p></section>}
+   {result.sourceStatus.some(s=>s.service==='google'&&s.state==='skipped')&&<div className="prospect-subtle-note"><Info size={15}/> Para consultar o Google Maps, informe também o nome ou segmento da empresa.</div>}
+  </section>}
  </>;
 }
