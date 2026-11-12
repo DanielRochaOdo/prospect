@@ -14,5 +14,6 @@ test('valida CNPJ numérico e alfanumérico',()=>{
  assert.ok(validCnpj('11222333000181'));
  assert.ok(validCnpj('12ABC34501DE35'));
  assert.ok(!validCnpj('11222333000182'));
+ assert.ok(!validCnpj('00000000000000'));
  assert.equal(cnpjKind('11.222.333/0001-81'),'exact');
 });
