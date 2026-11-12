@@ -159,12 +159,32 @@ CREATE TABLE IF NOT EXISTS segments (
  created_at timestamptz NOT NULL DEFAULT now()
 );
 -- statement
+-- Remova somente os cinco registros originais ainda intactos.
+-- Os segmentos cujo nome, termo, CNAE ou status foram personalizados permanecem preservados.
+-- statement
+DELETE FROM segments
+ WHERE active = true
+   AND (name,search_term,coalesce(cnae,'')) IN (
+     ('Clínicas odontológicas','atividade odontológica','8630504'),
+     ('Consultórios odontológicos','atividade odontológica','8630504'),
+     ('Laboratórios de prótese','serviços de prótese dentária','3250706'),
+     ('Materiais odontológicos','materiais odontológicos',''),
+     ('Distribuidores odontológicos','distribuição de materiais odontológicos','')
+   );
+-- statement
+-- Segmentos comerciais amplos para prospecção de benefícios corporativos.
+-- CNAE é NULL porque cada setor engloba diversas classes de atividades.
 INSERT INTO segments(name,search_term,cnae) VALUES
- ('Clínicas odontológicas','atividade odontológica','8630504'),
- ('Consultórios odontológicos','atividade odontológica','8630504'),
- ('Laboratórios de prótese','serviços de prótese dentária','3250706'),
- ('Materiais odontológicos','materiais odontológicos',NULL),
- ('Distribuidores odontológicos','distribuição de materiais odontológicos',NULL)
+ ('Educação','educação',NULL),
+ ('Indústria','indústria',NULL),
+ ('Comércio varejista','comércio varejista',NULL),
+ ('Comércio atacadista','comércio atacadista',NULL),
+ ('Construção civil','construção civil',NULL),
+ ('Transporte e logística','transporte e logística',NULL),
+ ('Tecnologia e informática','tecnologia da informação',NULL),
+ ('Serviços administrativos','serviços administrativos',NULL),
+ ('Hotelaria e turismo','hotelaria e turismo',NULL),
+ ('Alimentação','alimentação',NULL)
 ON CONFLICT (name) DO NOTHING;
 
 -- Atualização idempotente dos limites inicialmente fornecidos no app.

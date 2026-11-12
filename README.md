@@ -89,6 +89,14 @@ Fontes verificadas em 12/11/2026:
 - [Tabela de preços Google Places (New)](https://developers.google.com/maps/billing-and-pricing/pricing)
 - [Limites e faturamento Google Places](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing)
 
+## Segmentos empresariais iniciais
+
+O Prospect Odontoart é voltado à **prospecção comercial de empresas para oferta de plano odontológico corporativo**. O seletor **Setor empresarial** disponibiliza dez opções iniciais: Educação, Indústria, Comércio varejista, Comércio atacadista, Construção civil, Transporte e logística, Tecnologia e informática, Serviços administrativos, Hotelaria e turismo e Alimentação.
+
+Os setores são atalhos de pesquisa e **não restringem o uso do sistema**: o usuário também pode pesquisar livremente por atividade, nome, CNAE, CNPJ ou localização. Como um setor pode cobrir muitos CNAEs, os atalhos são cadastrados sem CNAE fixo; se necessário, o administrador configura ou altera os setores em **Configurações**.
+
+Ao rodar `node --env-file=.env.local scripts/migrate.mjs` após atualizar o código, a migração remove somente os cinco segmentos odontológicos do *seed* antigo que permaneçam com nome, termo, CNAE e status originais. Segmentos personalizados são preservados. Os novos setores são incluídos apenas quando ainda não existirem.
+
 ## Endpoints internos
 
 | Método e rota | Função |

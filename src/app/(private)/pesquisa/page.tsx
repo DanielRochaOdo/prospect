@@ -63,10 +63,10 @@ export default function Pesquisa(){
    <form onSubmit={e=>{e.preventDefault();void run();}}>
     <div className="prospect-filter-grid">
      <label className="prospect-filter-wide">CNPJ ou raiz<input value={query.cnpj} onChange={e=>set('cnpj',e.target.value)} placeholder="Ex.: 03.187.913 ou 03.187.913/0001-00" autoComplete="off"/></label>
-     <label>Segmento rápido<select value="" onChange={e=>{const segment=segments.find(x=>x.id===e.target.value);if(segment)setQuery(q=>({...q,segment:segment.search_term,cnae:segment.cnae||''}));}}><option value="">Selecionar segmento</option>{segments.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+     <label>Setor empresarial<select value="" onChange={e=>{const segment=segments.find(x=>x.id===e.target.value);if(segment)setQuery(q=>({...q,segment:segment.search_term,cnae:segment.cnae||''}));}}><option value="">Selecionar setor</option>{segments.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
      <label>Nome da empresa<input value={query.name} onChange={e=>set('name',e.target.value)} placeholder="Razão social ou nome fantasia"/></label>
-     <label>Atividade ou segmento<input value={query.segment} onChange={e=>set('segment',e.target.value)} placeholder="Ex.: odontologia"/></label>
-     <label>CNAE<input value={query.cnae} onChange={e=>set('cnae',e.target.value.replace(/\D/g,'').slice(0,7))} placeholder="Ex.: 8630504"/></label>
+     <label>Atividade ou setor<input value={query.segment} onChange={e=>set('segment',e.target.value)} placeholder="Ex.: educação, indústria, logística"/></label>
+     <label>CNAE<input value={query.cnae} onChange={e=>set('cnae',e.target.value.replace(/\D/g,'').slice(0,7))} placeholder="Ex.: 4711302"/></label>
      <label>Cidade<input value={query.city} onChange={e=>set('city',e.target.value)} placeholder="Fortaleza"/></label>
      <label>UF<input value={query.state} onChange={e=>set('state',e.target.value.toUpperCase().slice(0,2))} placeholder="CE" maxLength={2}/></label>
      <label>Bairro<input value={query.district} onChange={e=>set('district',e.target.value)} placeholder="Aldeota"/></label>
