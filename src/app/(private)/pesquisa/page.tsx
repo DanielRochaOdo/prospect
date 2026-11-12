@@ -55,7 +55,7 @@ export default function Pesquisa(){
   if(!lastQuery||!result.nextCursor)return;
   setLoading(true);setError('');
   let records=[...result.items];
-  let cursor=result.nextCursor;
+  let cursor:string|null=result.nextCursor;
   let statuses=[...result.sourceStatus];
   const visited=new Set<string>();
   try{
@@ -138,7 +138,7 @@ export default function Pesquisa(){
     <button className="btn primary" type="button" disabled={exporting||!result.items.length} onClick={exportXlsx}><FileDown size={16}/>{exporting?'Gerando XLSX...':'Exportar XLSX'}</button>
    </div>
    {failures.length>0&&<div className="alert section-space" role="status"><AlertTriangle size={15}/> Algumas consultas não foram concluídas: {failures.map(f=>`${statusName[f.service]} — ${f.message||'indisponível'}`).join(' • ')}. Os resultados obtidos permanecem disponíveis.</div>}
-   {!result.items.length&&<div className="panel empty section-space"><Search size={30}/><h3>Nenhuma empresa encontrada</h3><p>Tente ampliar a cidade, alterar o CNAE ou pesquisar a raiz do CNPJ.</p></div>}
+   {!result.items.length&&<div className="panel empty section-space"><Search size={30}/><h3>Nenhuma empresa nesta página</h3><p>{result.nextCursor?'Há mais páginas disponíveis; avance para continuar.':'Tente ampliar a cidade, alterar o CNAE ou pesquisar a raiz do CNPJ.'}</p></div>}
    {pageCompanies.length>0&&<div className="card-stack section-space">{pageCompanies.map(item=><article key={item.cnpj} className="result-card prospect-result-card"><div className="prospect-company-info"><div className="prospect-company-top"><h3>{item.tradeName||item.legalName}</h3><span className="badge gray">{item.isHeadquarters===true?'Matriz':item.isHeadquarters===false?'Filial':'Estabelecimento'}</span></div>{item.tradeName&&item.tradeName!==item.legalName&&<p>{item.legalName}</p>}
     <div className="result-meta"><span><Building2 size={14}/>{formatCnpj(item.cnpj)}</span><span><MapPin size={14}/>{[item.city,item.state].filter(Boolean).join(' / ')||'Localização não informada'}</span></div>
     <div className="prospect-contact-grid"><div className={`prospect-contact ${item.phone?'has-phone':''}`}><Phone size={16}/><div><small>TELEFONE</small>{item.phone?<a href={`tel:${normalizePhone(item.phone)}`}>{item.phone}</a>:<span>Não informado</span>}</div></div><div className="prospect-contact"><Mail size={16}/><div><small>E-MAIL</small>{item.email?<a href={`mailto:${item.email}`}>{item.email}</a>:<span>Não informado</span>}</div></div></div>
@@ -159,8 +159,8 @@ export default function Pesquisa(){
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}
-   {loaded>0&&<nav className="prospect-pagination" aria-label="Navegação dos resultados">
-    <span className="muted-small">Exibindo {firstShown.toLocaleString('pt-BR')}–{lastShown.toLocaleString('pt-BR')} de {loaded.toLocaleString('pt-BR')} carregados{result.nextCursor?' (há mais páginas)':''}</span>
+   {(loaded>0||!!result.nextCursor)&&<nav className="prospect-pagination" aria-label="Navegação dos resultados">
+    <span className="muted-small">Exibindo {loaded?firstShown.toLocaleString('pt-BR'):'0'}–{lastShown.toLocaleString('pt-BR')} de {loaded.toLocaleString('pt-BR')} carregados{result.nextCursor?' (há mais páginas)':''}</span>
     <div className="prospect-pagination-controls">
      <button type="button" className="btn small outline" disabled={loading||pageNumber<=1} onClick={()=>setPageNumber(n=>Math.max(1,n-1))}><ChevronLeft size={15}/> Anterior</button>
      <span className="prospect-page-number" aria-current="page">Página {pageNumber}</span>
