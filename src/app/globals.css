@@ -114,3 +114,7 @@ html[data-theme="dark"]{
 @media(max-width:1120px){.prospect-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:800px){.prospect-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.prospect-search-panel{padding:20px}}
 @media(max-width:540px){.prospect-filter-grid{grid-template-columns:1fr}.prospect-filter-wide{grid-column:span 1}.prospect-places-grid{grid-template-columns:1fr}.prospect-result-card{flex-direction:column}.prospect-result-card>.result-actions{width:100%}.prospect-result-card>.result-actions button{width:100%}.prospect-search-actions .result-actions{width:100%}.prospect-search-actions .result-actions .btn{flex:1}}
+
+/* Gestores identificados automaticamente */
+.prospect-people-loading{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted);margin:12px 0 2px;}
+.prospect-people-loading svg{color:var(--blue);flex:0 0 auto;}

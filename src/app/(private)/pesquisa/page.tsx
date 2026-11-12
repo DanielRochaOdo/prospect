@@ -1,6 +1,7 @@
 'use client';
 
 import {useEffect,useMemo,useState} from 'react';
+import {useAutomaticPeople} from '@/hooks/useAutomaticPeople';
 import Link from 'next/link';
 import {Search,MapPin,Building2,Phone,Mail,Plus,ArrowRight,Info,AlertTriangle,LoaderCircle,CheckCircle2,ExternalLink,ShieldCheck,UsersRound,FileDown} from 'lucide-react';
 import {apiRequest,post,formatCnpj} from '@/lib/client';
@@ -11,7 +12,6 @@ type Query={cnpj:string;name:string;segment:string;cnae:string;city:string;state
 type Status={service:'cnpjai'|'localiza'|'google';state:'ok'|'error'|'skipped';message?:string};
 type SearchResult={items:CompanyResult[];places:PlaceResult[];nextCursor:string|null;partial:boolean;phoneCount:number;sourceStatus:Status[]};
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
-type PeopleResult={people:DecisionMaker[];domain:string|null;statuses:{provider:'apollo'|'hunter';state:'ok'|'error'|'skipped';message:string}[]};
 const empty:Query={cnpj:'',name:'',segment:'',cnae:'',city:'',state:'',district:'',activeOnly:true,branches:'all',pageSize:20};
 const statusName:Record<Status['service'],string>={cnpjai:'CNPJ.ai',localiza:'LocalizaCNPJ',google:'Google Places'};
 const normalizePhone=(s:string)=>s.replace(/[^\d+]/g,'');
@@ -26,10 +26,8 @@ export default function Pesquisa(){
  const [saving,setSaving]=useState('');
  const [lastQuery,setLastQuery]=useState<Query|null>(null);
  const [preferPhone,setPreferPhone]=useState(true);
- const [peopleByCompany,setPeopleByCompany]=useState<Record<string,PeopleResult>>({});
- const [peopleError,setPeopleError]=useState<Record<string,string>>({});
- const [companyDomains,setCompanyDomains]=useState<Record<string,string>>({});
- const [peopleLoading,setPeopleLoading]=useState<string|null>(null);
+ const [searchVersion,setSearchVersion]=useState(0);
+ const {byRoot:peopleByRoot,queuedCount}=useAutomaticPeople(result?.items,searchVersion);
  const [exporting,setExporting]=useState(false);
  useEffect(()=>{apiRequest<{segments:Segment[]}>('/api/segments').then(d=>setSegments(d.segments.filter(x=>x.active))).catch(()=>{});},[]);
  const set=(name:keyof Query,value:string|boolean)=>setQuery(prev=>({...prev,[name]:value}));
@@ -52,25 +50,15 @@ export default function Pesquisa(){
     setResult({...data,items:merged,places:result.places,phoneCount:merged.filter(x=>!!x.phone).length,
        sourceStatus:[...result.sourceStatus,...data.sourceStatus]});
    }else{
-    setResult(data);setLastQuery({...query});setSaved([]);setPeopleByCompany({});setPeopleError({});
+    setSearchVersion(v=>v+1);setResult(data);setLastQuery({...query});setSaved([]);
    }
   }catch(e){setError((e as Error).message);}finally{setLoading(false);}
- }
- async function findPeople(item:CompanyResult){
-  const cnpj=item.cnpj;
-  setPeopleLoading(cnpj);setPeopleError(prev=>({...prev,[cnpj]:''}));
-  try{
-   const companyName=item.tradeName||item.legalName;
-   const data=await post('/api/people',{companyName,domain:companyDomains[cnpj]?.trim()||undefined,includeHunter:true}) as PeopleResult;
-   setPeopleByCompany(prev=>({...prev,[cnpj]:data}));
-  }catch(e){setPeopleError(prev=>({...prev,[cnpj]:(e as Error).message}));}
-  finally{setPeopleLoading(null);}
  }
  async function exportXlsx(){
   if(!companies.length)return;
   setExporting(true);setError('');
   try{
-   const people=Object.entries(peopleByCompany).flatMap(([cnpj,data])=>data.people.map(person=>({cnpj,...person})));
+   const people=companies.flatMap(company=>(peopleByRoot[company.cnpjRoot]?.result?.people||[]).map(person=>({cnpj:company.cnpj,...person})));
    const response=await fetch('/api/export/xlsx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({companies,people})});
    if(!response.ok){const data=await response.json().catch(()=>({error:'Não foi possível exportar o arquivo.'}));throw new Error(data.error||'Falha na exportação XLSX');}
    const blob=await response.blob();
@@ -108,7 +96,7 @@ export default function Pesquisa(){
         <label><input type="checkbox" checked={query.activeOnly} onChange={e=>set('activeOnly',e.target.checked)}/>Apenas empresas ativas</label>
         <label><input type="checkbox" checked={preferPhone} onChange={e=>setPreferPhone(e.target.checked)}/>Priorizar com telefone</label>
       </div>
-      <div className="result-actions"><button type="button" className="btn" disabled={loading} onClick={()=>{setQuery({...empty});setResult(null);setLastQuery(null);setPeopleByCompany({});setPeopleError({});setError('');}}>Limpar</button><button className="btn primary" disabled={loading} type="submit">{loading?<LoaderCircle size={16} className="prospect-spin"/>:<Search size={16}/>} {loading?'Consultando...':'Pesquisar empresas'}<ArrowRight size={15}/></button></div>
+      <div className="result-actions"><button type="button" className="btn" disabled={loading} onClick={()=>{setQuery({...empty});setResult(null);setLastQuery(null);setSearchVersion(v=>v+1);setError('');}}>Limpar</button><button className="btn primary" disabled={loading} type="submit">{loading?<LoaderCircle size={16} className="prospect-spin"/>:<Search size={16}/>} {loading?'Consultando...':'Pesquisar empresas'}<ArrowRight size={15}/></button></div>
     </div>
    </form>
    <div className="prospect-privacy-note"><ShieldCheck size={16}/><span>Contatos para o CRM vêm de fontes cadastrais. Informações do Google Maps, quando exibidas, são apenas para consulta pontual e não são armazenadas ou exportadas.</span></div>
@@ -118,7 +106,7 @@ export default function Pesquisa(){
   {result&&<section className="section-space" aria-live="polite">
    <div className="prospect-result-overview">
     <div><span className="eyebrow">RESULTADOS</span><h2>{result.items.length.toLocaleString('pt-BR')} empresas encontradas</h2><p>{phones.toLocaleString('pt-BR')} com telefone informado pelas fontes cadastrais</p></div>
-    <div className="prospect-overview-metrics"><span><Phone size={17}/><strong>{phones}</strong> com telefone</span><span><Building2 size={17}/><strong>{result.items.length}</strong> empresas</span></div>
+    <div className="prospect-overview-metrics"><span><Phone size={17}/><strong>{phones}</strong> com telefone</span><span><Building2 size={17}/><strong>{result.items.length}</strong> empresas</span>{queuedCount>0&&<span><UsersRound size={16}/><strong>{queuedCount}</strong> aguardando gestores</span>}</div>
     <button className="btn primary" type="button" disabled={exporting||!result.items.length} onClick={exportXlsx}><FileDown size={16}/>{exporting?'Gerando XLSX...':'Exportar XLSX'}</button>
    </div>
    {failures.length>0&&<div className="alert section-space" role="status"><AlertTriangle size={15}/> Algumas consultas não foram concluídas: {failures.map(f=>`${statusName[f.service]} — ${f.message||'indisponível'}`).join(' • ')}. Os resultados obtidos permanecem disponíveis.</div>}
@@ -129,24 +117,17 @@ export default function Pesquisa(){
     {item.address&&<p className="prospect-address">{item.address}</p>}
     <div className="prospect-managers">
      <div className="prospect-managers-head"><UsersRound size={17}/><strong>Gestores e decisores</strong><span className="muted-small">RH, Benefícios, Administrativo e Diretoria</span></div>
-     <div className="prospect-managers-actions">
-      <input type="text" aria-label={`Domínio corporativo de ${item.tradeName||item.legalName}`} placeholder="Site da empresa, se souber (opcional)" value={companyDomains[item.cnpj]||''} onChange={e=>setCompanyDomains(old=>({...old,[item.cnpj]:e.target.value}))}/>
-      <button type="button" className="btn small outline" disabled={peopleLoading!==null} onClick={()=>findPeople(item)}>
-       {peopleLoading===item.cnpj?<LoaderCircle size={14} className="prospect-spin"/>:<UsersRound size={14}/>}
-       {peopleLoading===item.cnpj?'Localizando...':peopleByCompany[item.cnpj]?'Atualizar gestores':'Encontrar gestores'}
-      </button>
-     </div>
-     {peopleError[item.cnpj]&&<p className="prospect-manager-error" role="alert">{peopleError[item.cnpj]}</p>}
-     {peopleByCompany[item.cnpj]&&<>
-      {peopleByCompany[item.cnpj].people.length>0?
-       <div className="prospect-person-list">{peopleByCompany[item.cnpj].people.map((person,i)=><div className="prospect-person" key={person.source+person.name+i}>
+     {peopleByRoot[item.cnpjRoot]?.state==='loading'||!peopleByRoot[item.cnpjRoot]?
+      <p className="prospect-people-loading"><LoaderCircle size={15} className="prospect-spin"/> Pesquisando gestores automaticamente...</p>:
+      peopleByRoot[item.cnpjRoot]?.state==='error'?
+       <p className="prospect-manager-error" role="status">{peopleByRoot[item.cnpjRoot]?.error||'Não foi possível consultar os gestores.'}</p>:
+      (peopleByRoot[item.cnpjRoot]?.result?.people.length||0)>0?
+       <div className="prospect-person-list">{peopleByRoot[item.cnpjRoot]?.result?.people.map((person,i)=><div className="prospect-person" key={person.source+person.name+i}>
         <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small></div>
        </div>)}</div>:
-       <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável. Informe o domínio oficial e tente novamente.</p>}
-      {peopleByCompany[item.cnpj].statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{s.provider==='apollo'?'Apollo':'Hunter'}: {s.message}</p>)}
-      {peopleByCompany[item.cnpj].statuses.filter(s=>s.state==='skipped').map(s=><p className="muted-small" key={s.provider}>{s.provider==='apollo'?'Apollo':'Hunter'}: {s.message}</p>)}
-     </>}
-     <p className="prospect-manager-note">A consulta Hunter pode consumir créditos da franquia gratuita. Os dados de pessoas não são gravados automaticamente no CRM.</p>
+       <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável para esta empresa.</p>}
+     {peopleByRoot[item.cnpjRoot]?.result?.statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{s.provider==='apollo'?'Apollo':'Hunter'}: {s.message}</p>)}
+     <p className="prospect-manager-note">Identificação automática por razão social. A consulta pode consumir créditos gratuitos do Hunter, respeitando os limites configurados.</p>
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}

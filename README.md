@@ -98,14 +98,15 @@ Os setores são atalhos de pesquisa e **não restringem o uso do sistema**: o us
 Ao rodar `node --env-file=.env.local scripts/migrate.mjs` após atualizar o código, a migração remove somente os cinco segmentos odontológicos do *seed* antigo que permaneçam com nome, termo, CNAE e status originais. Segmentos personalizados são preservados. Os novos setores são incluídos apenas quando ainda não existirem.
 
 
-### Pesquisa de gestores (Apollo e Hunter)
+### Pesquisa automática de gestores (Apollo e Hunter)
 
-A tela **Pesquisar empresas** inclui a ação **Encontrar gestores** em cada cartão empresarial, sem mudar de aba. Cada ação consulta as integrações configuradas e destaca profissionais de RH, Benefícios, Administração e Diretoria.
+A tela **Pesquisar empresas** identifica gestores automaticamente, sem botão de consulta nem campo de site. Assim que os dados cadastrais da empresa são retornados, o navegador consulta a rota autenticada \`/api/people\` e apresenta progressivamente nomes e cargos. Empresas com a mesma raiz de CNPJ (matriz e filiais) compartilham uma única consulta durante a pesquisa, evitando desperdício de créditos.
 
-1. Crie uma API key Apollo com permissão para **People API Search** e cadastre `APOLLO_API_KEY` no ambiente local e na Vercel. A pesquisa não consome créditos Apollo, mas exige uma conta elegível (Free geralmente com e-mail profissional). O retorno pode ocultar parte do sobrenome e não inclui e-mails ou telefones: isso será sinalizado na interface.
-2. Crie uma chave Hunter e cadastre `HUNTER_API_KEY`. O **Domain Finder** busca o domínio corporativo sem consumir créditos; o **Domain Search** (até 10 contatos por chamada) utiliza créditos da franquia gratuita, por isso começa com teto interno de 40 chamadas/mês e 5/min. O plano Free publica 50 créditos/mês; outras consultas feitas na própria Hunter também podem gastar esses créditos.
-3. Quando um nome empresarial não puder ser relacionado com segurança ao domínio, o usuário pode informar o **site corporativo** no cartão antes da consulta. Não fazemos associação por nomes semelhantes sem validação.
-4. As consultas ocorrem **sob demanda** para não esgotar a cota gratuita ao pesquisar dezenas de empresas. A identificação de gestores não depende de possuir telefone ou e-mail pessoal; o telefone corporativo continua visível no cartão da empresa.
+A consulta usa a razão social da fonte de CNPJ, nunca nomes provenientes do Google Maps. Para evitar falsos positivos, o backend utiliza o **Hunter Domain Finder** (gratuito, sem crédito) somente com correspondência empresarial estrita para descobrir um domínio; em seguida executa a busca de gestores pelo **Apollo** (sem créditos quando a conta é elegível). Quando não há nomes completos adequados, o **Hunter Domain Search** é usado como complemento, com crédito sujeito ao limite configurado. Se não for possível confirmar a identidade da empresa, o resultado não associa pessoas por semelhança fraca.
+
+A interface exibe **Pesquisando gestores...**, os nomes encontrados, ou informa ausência de correspondência e eventuais falhas/cotas. As consultas são graduais (uma empresa por vez) para reduzir estouros do limite por minuto; resultados de uma página com dezenas de empresas podem demorar para aparecer completamente. As consultas interrompem novas buscas quando o usuário inicia outra pesquisa ou deixa a tela, exceto requisições já enviadas. Não há necessidade de digitar domínio ou iniciar consulta manual.
+
+Cadastre \`APOLLO_API_KEY\` e \`HUNTER_API_KEY\` exclusivamente nas variáveis de ambiente locais e da Vercel. Caso uma integração não esteja configurada ou atinja o limite, a busca cadastral continua operacional e informa a disponibilidade dos gestores.
 
 ### Exportação XLSX dos resultados
 
