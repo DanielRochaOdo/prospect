@@ -98,15 +98,19 @@ Os setores são atalhos de pesquisa e **não restringem o uso do sistema**: o us
 Ao rodar `node --env-file=.env.local scripts/migrate.mjs` após atualizar o código, a migração remove somente os cinco segmentos odontológicos do *seed* antigo que permaneçam com nome, termo, CNAE e status originais. Segmentos personalizados são preservados. Os novos setores são incluídos apenas quando ainda não existirem.
 
 
-### Pesquisa automática de gestores (Apollo e Hunter)
+### Identificação automática de gestores (OpenCNPJ + Exa)
 
-A tela **Pesquisar empresas** identifica gestores automaticamente, sem botão de consulta nem campo de site. Assim que os dados cadastrais da empresa são retornados, o navegador consulta a rota autenticada \`/api/people\` e apresenta progressivamente nomes e cargos. Empresas com a mesma raiz de CNPJ (matriz e filiais) compartilham uma única consulta durante a pesquisa, evitando desperdício de créditos.
+A tela **Pesquisar empresas** mostra nomes e cargos sem exigir domínio corporativo nem botão de consulta. A pesquisa acontece somente para as empresas da **página visualizada**, uma vez por raiz de CNPJ, para economizar créditos.
 
-A consulta usa a razão social da fonte de CNPJ, nunca nomes provenientes do Google Maps. Para evitar falsos positivos, o backend utiliza o **Hunter Domain Finder** (gratuito, sem crédito) somente com correspondência empresarial estrita para descobrir um domínio; em seguida executa a busca de gestores pelo **Apollo** (sem créditos quando a conta é elegível). Quando não há nomes completos adequados, o **Hunter Domain Search** é usado como complemento, com crédito sujeito ao limite configurado. Se não for possível confirmar a identidade da empresa, o resultado não associa pessoas por semelhança fraca.
+- **OpenCNPJ, sem chave:** GET https://kitana.opencnpj.com/cnpj/{cnpj} devolve o quadro de sócios e administradores (QSA). Cada nome é associado **somente ao CNPJ idêntico** e acompanhado da qualificação da Receita. O fornecedor publica 300 req/min por IP; o Prospect adota limite interno conservador de 120/min e 3.000/mês, editáveis em Configurações.
+- **Exa People Search:** POST https://api.exa.ai/search com includeDomains: ["exa.ai/library/person"] pesquisa profissionais de RH, Benefícios e Diretoria a partir de razão social/nome fantasia, sem exigir que o usuário informe site. Somente perfis com nome, cargo e vínculo empresarial suficientemente verificável são apresentados. A Exa é tarifada por requisição e oferece US$ 10 em créditos mensais no plano gratuito, mais bônus inicial. O limite interno padrão de **400 pesquisas/mês e 5/min** é um **contador de requisições**, não um controle financeiro em dólares: configure também orçamento/alertas na Exa.
+- O OpenCNPJ identifica sócios e administradores, que nem sempre são gestores de RH. A origem de cada registro aparece na interface e na exportação XLSX.
+- Falhas de uma fonte não bloqueiam a outra. Não inventamos nomes, cargos ou vínculos profissionais.
+- Pessoas encontradas ficam apenas na memória da sessão de pesquisa, sem criação automática de leads. Observe a LGPD e os termos de licença dos fornecedores.
 
-A interface exibe **Pesquisando gestores...**, os nomes encontrados, ou informa ausência de correspondência e eventuais falhas/cotas. As consultas são graduais (uma empresa por vez) para reduzir estouros do limite por minuto; resultados de uma página com dezenas de empresas podem demorar para aparecer completamente. As consultas interrompem novas buscas quando o usuário inicia outra pesquisa ou deixa a tela, exceto requisições já enviadas. Não há necessidade de digitar domínio ou iniciar consulta manual.
+Obtenha a chave em https://dashboard.exa.ai/ e configure EXA_API_KEY no .env.local e nas variáveis de ambiente da Vercel. OpenCNPJ é público e não exige chave. As credenciais APOLLO_API_KEY e HUNTER_API_KEY não são mais utilizadas e podem ser retiradas do ambiente.
 
-Cadastre \`APOLLO_API_KEY\` e \`HUNTER_API_KEY\` exclusivamente nas variáveis de ambiente locais e da Vercel. Caso uma integração não esteja configurada ou atinja o limite, a busca cadastral continua operacional e informa a disponibilidade dos gestores.
+Após atualizar o código, execute novamente a migração: ela criará os limites de Exa e OpenCNPJ e retirará os registros antigos de cotas Apollo/Hunter, preservando histórico de consumo e auditoria.
 
 ### Paginação e contagem dos resultados (10 por página)
 

@@ -10,7 +10,7 @@ test('XLSX aceita e-mails cadastrais inválidos e campos incompletos',()=>{
  assert.equal(file.subarray(0,2).toString(),'PK');
 });
 test('Exportação ignora registro inválido sem perder os válidos',()=>{
- const parsed=normalizeExport({companies:[{cnpj:'00000000000100',legalName:'A',source:'cnpjai'},{cnpj:'invalido',source:'google'},{cnpj:'00000000000100',legalName:'duplicado',source:'localiza'},{cnpj:'00000000000200',legalName:'B',source:'localiza'}],people:[{cnpj:'00000000000100',name:'Maria Silva',role:'RH',source:'hunter',partialName:false}]});
+ const parsed=normalizeExport({companies:[{cnpj:'00000000000100',legalName:'A',source:'cnpjai'},{cnpj:'invalido',source:'google'},{cnpj:'00000000000100',legalName:'duplicado',source:'localiza'},{cnpj:'00000000000200',legalName:'B',source:'localiza'}],people:[{cnpj:'00000000000100',name:'Maria Silva',role:'RH',source:'opencnpj',partialName:false}]});
  assert.equal(parsed.companies.length,2);assert.equal(parsed.people.length,1);
 });
 test('Paginação mostra 10 por vez e consolida CNPJs sem duplicidade',()=>{

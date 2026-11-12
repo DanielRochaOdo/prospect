@@ -144,18 +144,18 @@ export default function Pesquisa(){
     <div className="prospect-contact-grid"><div className={`prospect-contact ${item.phone?'has-phone':''}`}><Phone size={16}/><div><small>TELEFONE</small>{item.phone?<a href={`tel:${normalizePhone(item.phone)}`}>{item.phone}</a>:<span>Não informado</span>}</div></div><div className="prospect-contact"><Mail size={16}/><div><small>E-MAIL</small>{item.email?<a href={`mailto:${item.email}`}>{item.email}</a>:<span>Não informado</span>}</div></div></div>
     {item.address&&<p className="prospect-address">{item.address}</p>}
     <div className="prospect-managers">
-     <div className="prospect-managers-head"><UsersRound size={17}/><strong>Gestores e decisores</strong><span className="muted-small">RH, Benefícios, Administrativo e Diretoria</span></div>
+     <div className="prospect-managers-head"><UsersRound size={17}/><strong>Gestores e decisores</strong><span className="muted-small">RH, Benefícios, Diretoria e sócios-administradores</span></div>
      {peopleByRoot[item.cnpjRoot]?.state==='loading'||!peopleByRoot[item.cnpjRoot]?
       <p className="prospect-people-loading"><LoaderCircle size={15} className="prospect-spin"/> Pesquisando gestores automaticamente...</p>:
       peopleByRoot[item.cnpjRoot]?.state==='error'?
        <p className="prospect-manager-error" role="status">{peopleByRoot[item.cnpjRoot]?.error||'Não foi possível consultar os gestores.'}</p>:
       (peopleByRoot[item.cnpjRoot]?.result?.people.length||0)>0?
        <div className="prospect-person-list">{peopleByRoot[item.cnpjRoot]?.result?.people.map((person,i)=><div className="prospect-person" key={person.source+person.name+i}>
-        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small></div>
+        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small><small>{person.source==='exa'?'Perfil profissional · Exa':'Quadro societário · OpenCNPJ'}</small></div>
        </div>)}</div>:
        <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável para esta empresa.</p>}
-     {peopleByRoot[item.cnpjRoot]?.result?.statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{s.provider==='apollo'?'Apollo':'Hunter'}: {s.message}</p>)}
-     <p className="prospect-manager-note">Identificação automática por razão social. A consulta pode consumir créditos gratuitos do Hunter, respeitando os limites configurados.</p>
+     {peopleByRoot[item.cnpjRoot]?.result?.statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{s.provider==='exa'?'Exa':'OpenCNPJ'}: {s.message}</p>)}
+     <p className="prospect-manager-note">Busca automática por CNPJ (sócios/administradores) e perfis profissionais (RH e direção). A Exa utiliza créditos conforme o seu plano.</p>
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}
