@@ -36,7 +36,7 @@ A senha deve ter ao menos 12 caracteres, com letras maiúsculas, minúsculas e n
 
 1. Crie ou selecione seu banco PostgreSQL no [console do Neon](https://console.neon.tech).
 2. Copie a string de conexão **pooled** para a variável `DATABASE_URL`, com `sslmode=require`, sem adicioná-la ao GitHub.
-3. No computador local com `.env.local` configurado, execute `npm run migrate` (carregue a variável no processo; o script não importa `.env.local` automaticamente). Alternativamente, copie o conteúdo de `db/schema.sql` e execute cada comando SQL no editor do Neon. Em ambientes locais, `node --env-file=.env.local scripts/migrate.mjs` usa o carregamento nativo do Node 22.
+3. No computador local com `.env.local` configurado, execute `npm run migrate` (carregue a variável no processo; o script não importa `.env.local` automaticamente). Alternativamente, copie o conteúdo de `db/schema.sql` e execute cada comando SQL no editor do Neon. Em ambientes locais, `node --env-file=.env.local scripts/migrate.mjs` usa o carregamento nativo do Node 22. A migração sincroniza também a lista oficial de subclasses CNAE do IBGE para `cnae_catalog` e as respectivas descrições de atividade para `business_activities`.
 4. A migration cria as tabelas, índices, limites iniciais e categorias odontológicas.
 
 **Observação:** o banco não é alterado automaticamente durante o build da Vercel. Isso evita que previews executem migrations contra a produção.
@@ -63,12 +63,16 @@ A senha deve ter ao menos 12 caracteres, com letras maiúsculas, minúsculas e n
 2. Cadastre `LOCALIZACNPJ_API_KEY` no servidor/Vercel.
 3. O endpoint `/busca/filtros` aceita CNAE, descrição de atividade, UF, cidade, bairro, razão social e raiz de CNPJ, retornando `resultados` e `next_cursor`.
 
+### Fichário (fallback por CNAE)
+
+O Fichário é acionado automaticamente quando a busca cadastral da LocalizaCNPJ falha, há CNAE selecionado, uma ou mais UFs selecionadas e a opção de empresas ativas está marcada. A integração usa a API gratuita, sem chave, e consulta o CNAE principal nas UFs selecionadas. O formulário inicia com CE selecionado e exige ao menos uma UF. O Fichário usa uma base derivada dos dados abertos da Receita, atualizada periodicamente. O sistema limita o uso a 3.000 chamadas em 24 horas e 60 por minuto. Consulte [API e limites do Fichário](https://fichario.app/api).
+
 ### Vercel
 
 1. No dashboard da Vercel, use **Add New Project → Import Git Repository** e selecione `DanielRochaOdo/prospect`.
 2. Configure framework **Next.js**, raiz do repositório e região de execução compatível com seu banco (por exemplo, `gru1` se disponível no seu plano).
 3. Configure as variáveis de ambiente **manualmente** em **Project Settings → Environment Variables**: `DATABASE_URL`, `CNPJ_AI_API_KEY`, `LOCALIZACNPJ_API_KEY`, `GOOGLE_PLACES_API_KEY` e `SETUP_TOKEN` (este último somente durante criação do administrador).
-4. Execute as migrations no Neon antes da primeira utilização.
+4. Execute as migrations no Neon antes da primeira utilização e sempre que o schema for atualizado. Para o catálogo CNAE completo, execute `node --env-file=.env.local scripts/migrate.mjs` apontando para o banco desejado; o comando é idempotente e importa os códigos/descrições oficiais do IBGE.
 5. Faça o deploy. Teste `/api/health` e abra `/setup`.
 6. Faça uma consulta real em cada API e confirme que o contador aumentou no painel.
 
@@ -152,6 +156,7 @@ Conteúdo do Google Maps **não** integra o XLSX. O servidor verifica autentica�
 | `GET /api/history` | Histórico de pesquisa |
 | `GET /api/limits`, `PATCH /api/limits` | Consumo e limites (PATCH admin) |
 | `GET /api/segments`, `POST`, `PATCH`, `DELETE` | Categorias de pesquisa |
+| `GET /api/catalog` | Catálogos de setor, atividade, CNAE e bairros |
 | `GET /api/users`, `POST /api/users`, `PATCH /api/users/:id` | Gestão de usuários (admin) |
 
 Todas as rotas de negócio exigem sessão válida; alterações exigem validação de origem e autorização no servidor. O limite de API é reservado antes da chamada sob trava transacional em PostgreSQL.
@@ -168,7 +173,7 @@ Os testes unitários incluídos validam CNPJ completo, raiz, prefixos, caractere
 
 ## Privacidade e origem dos dados
 
-- A origem dos registros comerciais fica identificada (`cnpjai`, `localiza` ou `manual`).
+- A origem dos registros comerciais fica identificada (`cnpjai`, `localiza`, `fichario` ou `manual`).
 - A pesquisa Google Places não é persistida como lista de leads. Apenas os **filtros** e o **número agregado de resultados** são registrados em `search_history`.
 - A base local de leads é exportada apenas com autenticação e respeitando o perfil (operadores só veem seus próprios registros).
 - Revise a base legal, as licenças das fontes cadastrais, a finalidade de prospecção e os procedimentos LGPD antes do uso comercial efetivo.

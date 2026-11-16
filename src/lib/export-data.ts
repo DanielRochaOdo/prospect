@@ -1,7 +1,7 @@
 import {z} from 'zod';
 const value=z.string().max(5000).nullable().optional();
 const company=z.object({
- cnpj:z.string().max(36), source:z.enum(['cnpjai','localiza','manual']),
+ cnpj:z.string().max(36), source:z.enum(['cnpjai','localiza','fichario','manual']),
  legalName:value,tradeName:value,isHeadquarters:z.boolean().nullable().optional(),
  cnae:value,segment:value,city:value,state:value,address:value,phone:value,email:value
 });

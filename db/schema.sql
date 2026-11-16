@@ -53,6 +53,10 @@ INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
  ('google','text_enterprise',1000,10)
 ON CONFLICT DO NOTHING;
 -- statement
+INSERT INTO api_limits(provider,operation,monthly_limit,minute_limit) VALUES
+ ('fichario','search',NULL,60)
+ON CONFLICT DO NOTHING;
+-- statement
 CREATE TABLE IF NOT EXISTS api_usage (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id uuid REFERENCES users(id) ON DELETE SET NULL,
@@ -71,6 +75,8 @@ CREATE INDEX IF NOT EXISTS api_usage_count_idx ON api_usage(provider,operation,p
 -- statement
 CREATE INDEX IF NOT EXISTS api_usage_minute_idx ON api_usage(provider,period_minute);
 -- statement
+CREATE INDEX IF NOT EXISTS api_usage_provider_created_idx ON api_usage(provider,operation,created_at DESC);
+-- statement
 CREATE TABLE IF NOT EXISTS search_history (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -87,7 +93,7 @@ CREATE TABLE IF NOT EXISTS companies (
  cnpj_root text NOT NULL UNIQUE,
  legal_name text NOT NULL,
  legal_nature text,
- source text NOT NULL CHECK(source IN ('cnpjai','localiza','manual')),
+ source text NOT NULL CHECK(source IN ('cnpjai','localiza','fichario','manual')),
  synced_at timestamptz NOT NULL DEFAULT now()
 );
 -- statement
@@ -107,11 +113,17 @@ CREATE TABLE IF NOT EXISTS establishments (
  postal_code text,
  phone text,
  email text,
- source text NOT NULL CHECK(source IN ('cnpjai','localiza','manual')),
+ source text NOT NULL CHECK(source IN ('cnpjai','localiza','fichario','manual')),
  synced_at timestamptz NOT NULL DEFAULT now()
 );
 -- statement
 CREATE INDEX IF NOT EXISTS establishments_company_idx ON establishments(company_id);
+-- statement
+ALTER TABLE companies DROP CONSTRAINT IF EXISTS companies_source_check;
+ALTER TABLE companies ADD CONSTRAINT companies_source_check CHECK(source IN ('cnpjai','localiza','fichario','manual'));
+-- statement
+ALTER TABLE establishments DROP CONSTRAINT IF EXISTS establishments_source_check;
+ALTER TABLE establishments ADD CONSTRAINT establishments_source_check CHECK(source IN ('cnpjai','localiza','fichario','manual'));
 -- statement
 CREATE TABLE IF NOT EXISTS leads (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -186,6 +198,41 @@ INSERT INTO segments(name,search_term,cnae) VALUES
  ('Hotelaria e turismo','hotelaria e turismo',NULL),
  ('Alimentação','alimentação',NULL)
 ON CONFLICT (name) DO NOTHING;
+
+-- Catálogos locais para busca por atividades, setores oficiais e subclasses CNAE.
+-- statement
+CREATE TABLE IF NOT EXISTS business_activities (
+ name text PRIMARY KEY,
+ search_term text NOT NULL,
+ sector text NOT NULL DEFAULT '',
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- statement
+DELETE FROM business_activities a USING segments s
+ WHERE a.name=s.search_term AND a.sector=s.name;
+-- statement
+CREATE TABLE IF NOT EXISTS cnae_catalog (
+ code text PRIMARY KEY CHECK(code ~ '^[0-9]{7}$'),
+ description text NOT NULL DEFAULT '',
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
+-- statement
+INSERT INTO cnae_catalog(code,description)
+ SELECT DISTINCT ON (cnae) cnae,search_term FROM segments WHERE cnae ~ '^[0-9]{7}$' ORDER BY cnae,search_term
+ ON CONFLICT(code) DO NOTHING;
+-- statement
+CREATE TABLE IF NOT EXISTS business_locations (
+ state text NOT NULL,
+ city text NOT NULL,
+ district text NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(state,city,district)
+);
+-- statement
+INSERT INTO business_locations(state,city,district)
+ SELECT DISTINCT upper(state),city,district FROM establishments
+ WHERE state IS NOT NULL AND city IS NOT NULL AND district IS NOT NULL AND district<>''
+ ON CONFLICT(state,city,district) DO NOTHING;
 
 -- Quatro provedores complementares de gestores, com cotas idempotentes.
 -- Preserva limites personalizados configurados pelo administrador.

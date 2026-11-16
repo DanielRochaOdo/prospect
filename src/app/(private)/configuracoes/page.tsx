@@ -8,10 +8,11 @@ import {
 import {apiRequest, patch, post} from '@/lib/client';
 
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
-type Provider='cnpjai'|'localiza'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
+type Provider='cnpjai'|'localiza'|'fichario'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
 type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'qsa'|'domain_finder'|'domain_search';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
 
 const providerInfo=[
+  {id:'fichario' as const,name:'Fichário',subtitle:'Fallback cadastral por CNAE principal',summary:'Plano gratuito: até 3.000 chamadas/dia · 60/min. Busca exige UF e considera o CNAE principal.',url:'https://fichario.app/api',icon:Network,tag:'Fallback gratuito'},
   {id:'cnpjai' as const,name:'CNPJ.ai',subtitle:'Consulta de CNPJ, matrizes e filiais',summary:'Sem cota mensal publicada · 60 chamadas/min por conta, compartilhadas',url:'https://cnpj.ai/api/docs',icon:Network,tag:'Gratuito'},
   {id:'localiza' as const,name:'LocalizaCNPJ',subtitle:'Busca por segmento, CNAE e localização',summary:'Plano Free: 2.000 consultas/mês · 40 chamadas/min',url:'https://localizacnpj.com.br/portal-api',icon:Building2,tag:'Plano Free'},
   {id:'opencnpj' as const,name:'OpenCNPJ',subtitle:'Sócios e administradores identificados pelo CNPJ',summary:'API pública sem chave: até 300 req/min por IP. Teto interno configurado: 3.000/mês e 120/min.',url:'https://opencnpj.com/api',icon:ContactRound,tag:'Gratuito'},

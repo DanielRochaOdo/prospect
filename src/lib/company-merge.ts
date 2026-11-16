@@ -3,7 +3,7 @@ export type RegistryCompany = {
   cnpj:string; cnpjRoot:string; legalName:string; tradeName:string|null;
   isHeadquarters:boolean|null; status:string|null; cnae:string|null;segment:string|null;
   city:string|null;state:string|null;district:string|null;address:string|null;postalCode:string|null;
-  phone:string|null;email:string|null;source:'cnpjai'|'localiza';
+  phone:string|null;email:string|null;source:'cnpjai'|'localiza'|'fichario';
 };
 export function mergeRegistryCompanies<T extends RegistryCompany>(records:T[]):T[]{
   const byCnpj=new Map<string,T>();

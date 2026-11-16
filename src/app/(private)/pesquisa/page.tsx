@@ -8,17 +8,21 @@ import {Search,MapPin,Building2,Phone,Mail,Plus,ArrowRight,Info,AlertTriangle,Lo
 import {apiRequest,post,formatCnpj} from '@/lib/client';
 import type {CompanyResult,PlaceResult} from '@/services/providers';
 import type {DecisionMaker} from '@/lib/people';
+import {SearchableMultiSelect,type SelectOption} from '@/components/SearchableMultiSelect';
 
-type Query={cnpj:string;name:string;segment:string;cnae:string;city:string;state:string;district:string;activeOnly:boolean;branches:'all'|'headquarters'|'branches';pageSize:number;cursor?:string};
-type Status={service:'cnpjai'|'localiza'|'google';state:'ok'|'error'|'skipped';message?:string};
+type Query={cnpj:string;name:string;sector:string[];segment:string[];cnae:string[];city:string[];state:string[];district:string[];activeOnly:boolean;branches:'all'|'headquarters'|'branches';pageSize:number;cursor?:string};
+type Status={service:'cnpjai'|'localiza'|'fichario'|'google';state:'ok'|'error'|'skipped';message?:string};
 type SearchResult={items:CompanyResult[];places:PlaceResult[];nextCursor:string|null;partial:boolean;phoneCount:number;sourceStatus:Status[]};
-type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
-const empty:Query={cnpj:'',name:'',segment:'',cnae:'',city:'',state:'',district:'',activeOnly:true,branches:'all',pageSize:RESULTS_PER_PAGE};
-const statusName:Record<Status['service'],string>={cnpjai:'CNPJ.ai',localiza:'LocalizaCNPJ',google:'Google Places'};
+type Catalog={sectors:{name:string;search_term:string}[];activities:{name:string}[];cnaes:{code:string;description:string}[];districts:{name:string}[]};
+const empty:Query={cnpj:'',name:'',sector:[],segment:[],cnae:[],city:[],state:['CE'],district:[],activeOnly:true,branches:'all',pageSize:RESULTS_PER_PAGE};
+const states:SelectOption[]=['AC|Rio Branco','AL|Maceió','AP|Macapá','AM|Manaus','BA|Salvador','CE|Fortaleza','DF|Brasília','ES|Vitória','GO|Goiânia','MA|São Luís','MT|Cuiabá','MS|Campo Grande','MG|Belo Horizonte','PA|Belém','PB|João Pessoa','PR|Curitiba','PE|Recife','PI|Teresina','RJ|Rio de Janeiro','RN|Natal','RS|Porto Alegre','RO|Porto Velho','RR|Boa Vista','SC|Florianópolis','SP|São Paulo','SE|Aracaju','TO|Palmas'].map(x=>{const [value,label]=x.split('|');return {value,label:`${value} — ${label}`};});
+const statusName:Record<Status['service'],string>={cnpjai:'CNPJ.ai',localiza:'LocalizaCNPJ',fichario:'Fichário',google:'Google Places'};
 const normalizePhone=(s:string)=>s.replace(/[^\d+]/g,'');
 
 export default function Pesquisa(){
- const [segments,setSegments]=useState<Segment[]>([]);
+ const [catalog,setCatalog]=useState<Catalog>({sectors:[],activities:[],cnaes:[],districts:[]});
+ const [cities,setCities]=useState<SelectOption[]>([]);
+ const [loadingCities,setLoadingCities]=useState(false);
  const [query,setQuery]=useState<Query>({...empty});
  const [result,setResult]=useState<SearchResult|null>(null);
  const [error,setError]=useState('');
@@ -36,10 +40,13 @@ export default function Pesquisa(){
  },[companies,pageNumber,preferPhone]);
  const {byRoot:peopleByRoot,queuedCount}=useAutomaticPeople(pageCompanies,searchVersion);
  const [exporting,setExporting]=useState(false);
- useEffect(()=>{apiRequest<{segments:Segment[]}>('/api/segments').then(d=>setSegments(d.segments.filter(x=>x.active))).catch(()=>{});},[]);
+ useEffect(()=>{apiRequest<Catalog>('/api/catalog').then(setCatalog).catch(()=>{});},[]);
+ useEffect(()=>{let cancelled=false;async function load(){if(!query.state.length){setCities([]);return;}setLoadingCities(true);try{const lists=await Promise.all(query.state.map(async uf=>{const res=await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`);if(!res.ok)throw Error('Falha ao carregar municípios do IBGE.');return await res.json() as {nome:string}[]}));if(cancelled)return;const capitalByState=new Map(states.map(x=>[x.value,x.label.split(' — ')[1]]));const options=lists.flatMap((list,i)=>{const capital=capitalByState.get(query.state[i]);return [...list].sort((a,b)=>a.nome===capital?-1:b.nome===capital?1:a.nome.localeCompare(b.nome,'pt-BR')).map(x=>({value:x.nome,label:query.state.length>1?`${x.nome} (${query.state[i]})`:x.nome}));});setCities(options);}catch{if(!cancelled)setCities([]);}finally{if(!cancelled)setLoadingCities(false);}}void load();return()=>{cancelled=true};},[query.state]);
+ useEffect(()=>{const params=new URLSearchParams();query.state.forEach(x=>params.append('state',x));query.city.forEach(x=>params.append('city',x));apiRequest<Pick<Catalog,'districts'>>(`/api/catalog?${params}`).then(d=>setCatalog(c=>({...c,districts:d.districts}))).catch(()=>setCatalog(c=>({...c,districts:[]})));},[query.state,query.city]);
  const set=(name:keyof Query,value:string|boolean)=>setQuery(prev=>({...prev,[name]:value}));
  async function run(){
   if(loading)return;
+  if(!query.state.length){setError('Selecione ao menos uma UF para pesquisar.');return;}
   const payload={...query,pageSize:RESULTS_PER_PAGE};
   setLoading(true);setError('');
   try{
@@ -110,13 +117,13 @@ export default function Pesquisa(){
    <form onSubmit={e=>{e.preventDefault();void run();}}>
     <div className="prospect-filter-grid">
      <label className="prospect-filter-wide">CNPJ ou raiz<input value={query.cnpj} onChange={e=>set('cnpj',e.target.value)} placeholder="Ex.: 03.187.913 ou 03.187.913/0001-00" autoComplete="off"/></label>
-     <label>Setor empresarial<select value="" onChange={e=>{const segment=segments.find(x=>x.id===e.target.value);if(segment)setQuery(q=>({...q,segment:segment.search_term,cnae:segment.cnae||''}));}}><option value="">Selecionar setor</option>{segments.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+     <SearchableMultiSelect label="Setor empresarial" options={Array.from(new Map(catalog.sectors.map(x=>[x.search_term,{value:x.search_term,label:x.name}])).values())} value={query.sector} onChange={v=>setQuery(q=>({...q,sector:v}))} placeholder="Buscar setor"/>
      <label>Nome da empresa<input value={query.name} onChange={e=>set('name',e.target.value)} placeholder="Razão social ou nome fantasia"/></label>
-     <label>Atividade ou setor<input value={query.segment} onChange={e=>set('segment',e.target.value)} placeholder="Ex.: educação, indústria, logística"/></label>
-     <label>CNAE<input value={query.cnae} onChange={e=>set('cnae',e.target.value.replace(/\D/g,'').slice(0,7))} placeholder="Ex.: 4711302"/></label>
-     <label>Cidade<input value={query.city} onChange={e=>set('city',e.target.value)} placeholder="Fortaleza"/></label>
-     <label>UF<input value={query.state} onChange={e=>set('state',e.target.value.toUpperCase().slice(0,2))} placeholder="CE" maxLength={2}/></label>
-     <label>Bairro<input value={query.district} onChange={e=>set('district',e.target.value)} placeholder="Aldeota"/></label>
+     <SearchableMultiSelect label="Atividade" options={catalog.activities.map(x=>({value:x.name,label:x.name}))} value={query.segment} onChange={v=>setQuery(q=>({...q,segment:v}))} placeholder="Buscar atividade"/>
+     <SearchableMultiSelect label="CNAE" options={catalog.cnaes.map(x=>({value:x.code,label:`${x.code}${x.description?` — ${x.description}`:''}`}))} value={query.cnae} onChange={v=>setQuery(q=>({...q,cnae:v}))} placeholder="Buscar CNAE"/>
+     <SearchableMultiSelect label="Cidade" options={cities} value={query.city} onChange={v=>setQuery(q=>({...q,city:v,district:[]}))} placeholder={loadingCities?'Carregando cidades...':'Buscar cidade'} disabled={!query.state.length||loadingCities}/>
+     <SearchableMultiSelect label="UF" options={states} value={query.state} onChange={v=>setQuery(q=>({...q,state:v,city:[],district:[]}))} placeholder="Buscar estado"/>
+     <SearchableMultiSelect label="Bairro" options={catalog.districts.map(x=>({value:x.name,label:x.name}))} value={query.district} onChange={v=>setQuery(q=>({...q,district:v}))} placeholder={query.city.length?'Buscar bairro':'Selecione cidade primeiro'} disabled={!query.city.length}/>
      <label>Estabelecimentos<select value={query.branches} onChange={e=>setQuery(q=>({...q,branches:e.target.value as Query['branches']}))}><option value="all">Matriz e filiais</option><option value="headquarters">Somente matrizes</option><option value="branches">Somente filiais</option></select></label>
     </div>
     <div className="prospect-search-actions">
@@ -151,11 +158,9 @@ export default function Pesquisa(){
        <p className="prospect-manager-error" role="status">{peopleByRoot[item.cnpjRoot]?.error||'Não foi possível consultar os gestores.'}</p>:
       (peopleByRoot[item.cnpjRoot]?.result?.people.length||0)>0?
        <div className="prospect-person-list">{peopleByRoot[item.cnpjRoot]?.result?.people.map((person,i)=><div className="prospect-person" key={person.source+person.name+i}>
-        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small><small>{({exa:'Perfil profissional · Exa',opencnpj:'Quadro societário · OpenCNPJ',apollo:'Perfil profissional · Apollo',hunter:'Contato profissional · Hunter'} as const)[person.source]}</small></div>
+        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small></div>
        </div>)}</div>:
        <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável para esta empresa.</p>}
-     {peopleByRoot[item.cnpjRoot]?.result?.statuses.filter(s=>s.state==='error').map(s=><p className="prospect-manager-error" key={s.provider}>{({exa:'Exa',opencnpj:'OpenCNPJ',apollo:'Apollo',hunter:'Hunter'} as const)[s.provider]}: {s.message}</p>)}
-     <p className="prospect-manager-note">Busca automática com OpenCNPJ, Exa, Apollo e Hunter. Consultas Hunter podem consumir créditos, dentro dos limites configurados.</p>
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}

@@ -10,7 +10,7 @@ export type CompanyResult={
  cnpj:string; cnpjRoot:string; legalName:string;tradeName:string|null;
  isHeadquarters:boolean|null;status:string|null;cnae:string|null;segment:string|null;
  city:string|null;state:string|null;district:string|null;address:string|null;postalCode:string|null;
- phone:string|null;email:string|null;source:'cnpjai'|'localiza';
+ phone:string|null;email:string|null;source:'cnpjai'|'localiza'|'fichario';
 };
 export type PlaceResult={id:string;name:string;address:string;mapsUrl:string;phone:string|null};
 const str=(value:unknown):string|null=>typeof value==='string'&&value.trim()?value.trim():null;
@@ -73,15 +73,18 @@ export async function searchCnpj(query:Search,user:User){
  return {items:items.slice(0,query.pageSize),nextCursor:next,partial:kind==='prefix'&&!!next,scanned:totalScanned};
 }
 export async function searchLocaliza(query:Search,user:User){
+ const list=(value:string|string[]|undefined)=>value===undefined?[]:Array.isArray(value)?value:[value];
  const key=apiKey('LOCALIZACNPJ_API_KEY');
  const url=new URL('https://api.localizacnpj.com.br/busca/filtros');
  if(query.cnpj){const c=normalizeCnpj(query.cnpj);if(cnpjKind(c)==='invalid')throw new AppError(400,'CNPJ inválido');url.searchParams.set('cnpj',c.length===14?c:c.slice(0,8));}
  if(query.name)url.searchParams.set('razao_social',query.name);
- if(query.cnae)url.searchParams.set('cnae',query.cnae);
- else if(query.segment)url.searchParams.set('atividade',query.segment);
- if(query.city)url.searchParams.set('cidade',query.city);
- if(query.state)url.searchParams.set('uf',query.state);
- if(query.district)url.searchParams.set('bairro',query.district);
+ const cnaes=list(query.cnae),activities=[...list(query.sector),...list(query.segment)];
+ if(cnaes.length)url.searchParams.set('cnae',cnaes.join(','));
+ else if(activities.length)url.searchParams.set('atividade',activities.join(','));
+ const cities=list(query.city),states=list(query.state),districts=list(query.district);
+ if(cities.length)url.searchParams.set('cidade',cities.join(','));
+ if(states.length)url.searchParams.set('uf',states.join(','));
+ if(districts.length)url.searchParams.set('bairro',districts.join(','));
  if(query.activeOnly)url.searchParams.set('situacao','02');
  if(query.cursor)url.searchParams.set('cursor',query.cursor);
  url.searchParams.set('limit',String(query.pageSize));
@@ -94,10 +97,87 @@ export async function searchLocaliza(query:Search,user:User){
  if(query.branches==='headquarters')items=items.filter(i=>i.isHeadquarters===true);
  return {items,nextCursor:str(result.next_cursor),partial:!!result.has_more,snapshot:str(result.snapshot)};
 }
+const allStates=['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+type FicharioCursor={pair:number;page:number};
+const firstValue=(row:Record<string,unknown>,...keys:string[])=>{
+ for(const key of keys){const value=row[key];if(typeof value==='string'&&value.trim())return value.trim();if(typeof value==='number'||typeof value==='boolean')return String(value);}
+ return null;
+};
+function ficharioRows(input:Record<string,unknown>):Record<string,unknown>[]{
+ for(const key of ['resultados','results','empresas','items','data']){
+  const value=input[key];
+  if(Array.isArray(value))return value.map(object);
+  if(value&&typeof value==='object'){
+   const nested=ficharioRows(object(value));
+   if(nested.length)return nested;
+  }
+ }
+ return [];
+}
+function mapFichario(input:Record<string,unknown>):CompanyResult|null{
+ const full=normalizeCnpj(firstValue(input,'cnpj','cnpj_completo','cnpjCompleto','documento')??'');
+ if(full.length!==14)return null;
+ const matrix=firstValue(input,'identificador_matriz_filial','matriz_filial','tipo_estabelecimento','isHeadquarters','matriz');
+ const isHeadquarters=matrix==='1'||matrix?.toLowerCase()==='matriz'||matrix==='true'?true:
+  matrix==='2'||matrix?.toLowerCase()==='filial'||matrix==='false'?false:null;
+ return {cnpj:full,cnpjRoot:full.slice(0,8),
+  legalName:firstValue(input,'razao_social','nome_empresarial','legalName')??'Razão social não informada',
+  tradeName:firstValue(input,'nome_fantasia','fantasia','tradeName'),isHeadquarters,
+  status:firstValue(input,'situacao_cadastral','situacao','status'),
+  cnae:firstValue(input,'cnae_fiscal_principal','cnae_principal','cnaePrincipal','cnae'),
+  segment:firstValue(input,'cnae_descricao','descricao_cnae','cnaeDescription','atividade'),
+  city:firstValue(input,'municipio','cidade','city'),state:firstValue(input,'uf','estado','state'),
+  district:firstValue(input,'bairro'),
+  address:[firstValue(input,'tipo_logradouro'),firstValue(input,'logradouro'),firstValue(input,'numero'),firstValue(input,'complemento')].filter(Boolean).join(' ')||firstValue(input,'endereco'),
+  postalCode:firstValue(input,'cep','zipCode'),
+  phone:firstValue(input,'telefone','telefone1','telefone_1','numero_telefone','phone'),
+  email:firstValue(input,'email','correio_eletronico'),source:'fichario'};
+}
+function ficharioHasMore(response:Record<string,unknown>,rows:Record<string,unknown>[],page:number,pageSize:number){
+ const explicit=response.has_more??response.hasMore;
+ if(typeof explicit==='boolean')return explicit&&page<50;
+ const pages=Number(response.total_paginas??response.totalPages??response.total_pages);
+ if(Number.isFinite(pages)&&pages>0)return page<Math.min(50,pages);
+ return rows.length>=pageSize&&page<50;
+}
+export async function searchFichario(query:Search,user:User,cursor?:FicharioCursor){
+ const list=(value:string|string[]|undefined)=>value===undefined?[]:Array.isArray(value)?value:[value];
+ const cnaes=list(query.cnae).map(value=>value.replace(/\D/g,'')).filter(value=>/^\d{7}$/.test(value));
+ const states=list(query.state).map(value=>value.toUpperCase()).filter(value=>allStates.includes(value));
+ if(!states.length)throw new AppError(400,'Selecione ao menos uma UF para pesquisar no Fichário.');
+ const cities=list(query.city);
+ const regions=states;
+ const cityFilters=cities.length?cities:[''];
+ const pairs=cnaes.flatMap(cnae=>regions.flatMap(state=>cityFilters.map(city=>({cnae,state,city}))));
+ let pairIndex=Math.max(0,cursor?.pair??0),page=Math.max(1,cursor?.page??1);
+ let calls=0;const items:CompanyResult[]=[];let failure:unknown;
+ while(pairIndex<pairs.length&&items.length<query.pageSize&&calls<27){
+  const pair=pairs[pairIndex];
+  const pageSize=Math.min(20,query.pageSize-items.length);
+  const url=new URL('https://fichario.app/api/v1/busca-avancada');
+  url.searchParams.set('cnae',pair.cnae);url.searchParams.set('uf',pair.state);
+  if(pair.city)url.searchParams.set('cidade',pair.city);
+  url.searchParams.set('situacao','ativa');
+  url.searchParams.set('por_pagina',String(pageSize));url.searchParams.set('pagina',String(page));
+  try{
+   const response=object(await providerFetch('fichario','search',user,url.toString()));
+   const rows=ficharioRows(response);
+   for(const raw of rows.slice(0,pageSize)){const item=mapFichario(raw);if(item)items.push(item);}
+   calls++;
+   if(ficharioHasMore(response,rows,page,pageSize))page++;
+   else{pairIndex++;page=1;}
+  }catch(error){failure=error;break;}
+ }
+ const next=pairIndex<pairs.length?{pair:pairIndex,page}:null;
+ return {items:items.slice(0,query.pageSize),nextCursor:next,partial:!!next,calls,
+  error:failure instanceof Error?failure.message:failure?String(failure):undefined};
+}
 export async function searchGoogle(query:Search,user:User){
  const key=apiKey('GOOGLE_PLACES_API_KEY');
- if(!query.segment&&!query.name)throw new AppError(400,'Informe segmento ou nome do local.');
- const text=[query.name,query.segment,query.district,query.city,query.state,'Brasil'].filter(Boolean).join(', ');
+ const list=(value:string|string[]|undefined)=>value===undefined?[]:Array.isArray(value)?value:[value];
+ const segments=[...list(query.sector),...list(query.segment)],districts=list(query.district),cities=list(query.city),states=list(query.state);
+ if(!segments.length&&!query.name)throw new AppError(400,'Informe segmento ou nome do local.');
+ const text=[query.name,...segments,...districts,...cities,...states,'Brasil'].filter(Boolean).join(', ');
  const result=object(await providerFetch('google','text_enterprise',user,'https://places.googleapis.com/v1/places:searchText',{
   method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.googleMapsUri,places.nationalPhoneNumber,places.internationalPhoneNumber,nextPageToken'},
   body:JSON.stringify({textQuery:text,pageSize:Math.min(20,query.pageSize),languageCode:'pt-BR',regionCode:'BR',...(query.cursor?{pageToken:query.cursor}:{})})

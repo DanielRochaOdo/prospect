@@ -2,7 +2,7 @@ import {db} from '@/lib/db';
 import {AppError} from '@/lib/errors';
 import type {User} from '@/lib/auth';
 
-export type Provider='cnpjai'|'localiza'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
+export type Provider='cnpjai'|'localiza'|'fichario'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
 export type Operation='basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'qsa'|'domain_finder'|'domain_search';
 export function periods(date=new Date()){
  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(date);
@@ -18,10 +18,15 @@ export async function reserve(provider:Provider,operation:Operation,user:User){
   if(!config[0]?.enabled)throw new AppError(503,`Integração ${provider} desativada ou não configurada.`);
   const monthly=await tx`SELECT count(*)::int AS n FROM api_usage WHERE provider=${provider} AND operation=${operation} AND period_month=${p.month}`;
   if(config[0].monthly_limit!==null && monthly[0].n>=config[0].monthly_limit)throw new AppError(429,`Limite mensal de ${provider}/${operation} atingido.`);
+  if(provider==='fichario'){
+   const daily=await tx`SELECT count(*)::int AS n FROM api_usage WHERE provider=${provider} AND operation=${operation} AND created_at>=now()-interval '24 hours'`;
+   if(daily[0].n>=3000)throw new AppError(429,'Limite diário gratuito do Fichário atingido. Tente novamente mais tarde.');
+  }
   const minute=await tx`SELECT count(*)::int AS n FROM api_usage WHERE provider=${provider} AND period_minute=${p.minute}`;
   // A taxa por minuto é compartilhada por provedor. Usa-se o menor limite ativo do provedor.
   const rates=await tx`SELECT min(minute_limit)::int AS max FROM api_limits WHERE provider=${provider} AND enabled=true`;
-  if(minute[0].n>=rates[0].max)throw new AppError(429,`Muitas consultas à API ${provider}. Aguarde um minuto.`);
+  const minuteLimit=provider==='fichario'?Math.min(rates[0].max,60):rates[0].max;
+  if(minute[0].n>=minuteLimit)throw new AppError(429,provider==='fichario'?'Limite de 60 chamadas por minuto do Fichário atingido. Aguarde um minuto.':'Muitas consultas na API. Aguarde um minuto.');
   const inserted=await tx`INSERT INTO api_usage(user_id,provider,operation,period_month,period_minute) VALUES (${user.id},${provider},${operation},${p.month},${p.minute}) RETURNING id`;
   return inserted[0].id as string;
  });
@@ -33,16 +38,25 @@ export async function finish(id:string,status:number,duration:number){
 export async function providerFetch(provider:Provider,operation:Operation,user:User,url:string,init:RequestInit={}){
  const id=await reserve(provider,operation,user);const start=Date.now();let status=0;
  try{
-  const response=await fetch(url,{...init,cache:'no-store',signal:AbortSignal.timeout(20000)});
-  status=response.status;
-  if(!response.ok){
-   if(status===404)throw new AppError(404,'Empresa ou estabelecimento não encontrado.');
-   if(status===429)throw new AppError(429,'Limite do fornecedor atingido. Tente novamente mais tarde.');
-   if(status===401||status===403)throw new AppError(503,`Credenciais de ${provider} inválidas ou sem permissão.`);
-   if(status===409)throw new AppError(409,'A base da API foi atualizada. Reinicie a paginação.');
-   throw new AppError(502,`Fornecedor ${provider} indisponível (HTTP ${status}).`);
+  for(let attempt=0;attempt<2;attempt++){
+   try{
+    const response=await fetch(url,{...init,cache:'no-store',signal:AbortSignal.timeout(20000)});
+    status=response.status;
+    if(response.ok)return await response.json() as unknown;
+    if(status>=500&&attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+    if(status===404)throw new AppError(404,'Empresa ou estabelecimento não encontrado.');
+    if(status===429)throw new AppError(429,'Limite do fornecedor atingido. Tente novamente mais tarde.');
+    if(status===401||status===403)throw new AppError(503,`Credenciais de ${provider} inválidas ou sem permissão.`);
+    if(status===409)throw new AppError(409,'A base da API foi atualizada. Reinicie a paginação.');
+    throw new AppError(502,`Fornecedor ${provider} indisponível (HTTP ${status}).`);
+   }catch(err){
+    if(err instanceof AppError)throw err;
+    status=503;
+    if(attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+    throw new AppError(502,`Falha de conexão com ${provider} após uma nova tentativa.`);
+   }
   }
-  return await response.json() as unknown;
- }catch(err){if(!status)status=503; if(err instanceof AppError)throw err;throw new AppError(502,`Falha de conexão com ${provider}.`);}
+  throw new AppError(502,`Fornecedor ${provider} indisponível.`);
+ }
  finally{await finish(id,status,Date.now()-start);}
 }
