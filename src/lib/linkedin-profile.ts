@@ -11,16 +11,3 @@ export function verifiedLinkedInProfileUrl(value:unknown):string|null{
   return url.origin+url.pathname;
  }catch{return null;}
 }
-/**
- * Pesquisa executada pelo próprio usuário no site do LinkedIn.
- * Pode retornar homônimos ou empresas diferentes: confirmar antes de utilizar.
- */
-export function linkedinPeopleSearchUrl(companyName:string,tradeName?:string|null,personName?:string):string{
- const org=(tradeName?.trim()||companyName.trim()).slice(0,100);
- const term=personName?.trim()?
-  '"'+personName.trim().slice(0,100)+'" "'+org+'"':
-  '"'+org+'" (RH OR "recursos humanos" OR "benefícios" OR "people" OR gerente OR diretor OR diretora)';
- const url=new URL('https://www.linkedin.com/search/results/people/');
- url.searchParams.set('keywords',term);
- return url.toString();
-}

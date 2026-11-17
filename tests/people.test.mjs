@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mapOpenCnpjPeople,mapExaPeople,mapApolloPeople,mapHunterPeople,mergeDecisionMakers,organizationMatches,validCorporateDomain} from '../src/lib/people.ts';
 import {buildXlsx} from '../src/lib/xlsx.ts';
-import {verifiedLinkedInProfileUrl,linkedinPeopleSearchUrl} from '../src/lib/linkedin-profile.ts';
+import {verifiedLinkedInProfileUrl} from '../src/lib/linkedin-profile.ts';
 test('OpenCNPJ associa QSA somente ao CNPJ idêntico',()=>{
  const data={success:true,data:{cnpj:'00000000000191',razaoSocial:'BANCO DO BRASIL SA',
  socios:[{nomeSocio:'MARIA SILVA',descricao:'Presidente'},{nomeSocio:'JOAO PEREIRA',descricao:'Sócio-Administrador'}]}};
@@ -81,13 +81,6 @@ test('URLs falsas ou irrelevantes não são apresentadas como perfis do LinkedIn
   text:'Gerente de Recursos Humanos na Empresa Acme Serviços Ltda.'
  }]};
  assert.equal(mapExaPeople(payload,'Empresa Acme Serviços Ltda')[0].linkedinUrl,undefined);
-});
-test('Pesquisa LinkedIn é um link externo manual e não inventa perfis individuais',()=>{
- const url=new URL(linkedinPeopleSearchUrl('ACME SERVICOS LTDA','ACME','Ana Souza'));
- assert.equal(url.origin,'https://www.linkedin.com');
- assert.equal(url.pathname,'/search/results/people/');
- assert.match(url.searchParams.get('keywords')||'',/Ana Souza/);
- assert.match(url.searchParams.get('keywords')||'',/ACME/);
 });
 test('Deduplicação prefere perfil profissional verificável em caso de empate de cargo',()=>{
  const merged=mergeDecisionMakers([

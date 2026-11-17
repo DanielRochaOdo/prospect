@@ -242,10 +242,10 @@ As rotas autenticadas de teste são `/api/integrations/linkedin/ad-accounts` e `
 
 Este teste **não** sincroniza leads nem faz alterações na conta LinkedIn.
 
-### Verificação de gestores no LinkedIn
+### Gestores e decisores: fontes automáticas e limites do LinkedIn
 
-Em **Pesquisar empresas**, cada resultado apresenta **Pesquisar gestores no LinkedIn**, um link para a pesquisa de pessoas no próprio site. Esse acesso é manual e depende da sessão e da visibilidade de perfis do usuário no LinkedIn. A busca pode mostrar homônimos: sempre confirme o emprego atual e o cargo.
+O Prospect busca automaticamente nomes e cargos por Exa People Search, Apollo, Hunter e OpenCNPJ, mesmo quando não existe e-mail nem telefone. A fonte é identificada para cada gestor encontrado.
 
-O mecanismo de gestores continua consultando **Exa People Search**, **Apollo**, **Hunter** e **OpenCNPJ**. A Exa utiliza uma base de perfis profissionais com cargos e empregadores. Quando a Exa retorna uma URL genuína no formato `https://www.linkedin.com/in/...`, ela é exibida como **Ver perfil LinkedIn**, somente após validação do nome, cargo e vínculo empresarial. Caso não exista URL confirmada, a opção é **Procurar esta pessoa no LinkedIn** (busca manual, não representa perfil verificado). O nome e o cargo podem estar disponíveis mesmo sem telefone ou e-mail.
+Quando a Exa retorna um URL de perfil profissional no LinkedIn validado (formato `/in/...` ou `/pub/...`), ele pode aparecer como referência da fonte; o Prospect não obtém esses dados diretamente pela API oficial do LinkedIn. Não existe botão de busca manual de funcionários no LinkedIn.
 
-**Não existe busca generalizada de funcionários via autorização LinkedIn Lead Sync.** O OAuth aprovado se limita a leads de formulários autorizados. A aplicação não usa raspagem, cookies de sessão, API não oficial, nem automatiza pesquisas dentro da interface do LinkedIn. Os nomes/cargos exibidos são atribuídos aos fornecedores que os forneceram. Não atribuir dados da Exa à API oficial do LinkedIn.
+A aprovação do produto LinkedIn Lead Sync concede acesso a formulários e respostas de leads das organizações ou contas autorizadas. Não concede acesso de pesquisa geral de funcionários por CNPJ, razão social ou cargo. A Profile API também não é uma API de descoberta de empregados por empresa. Não apresentar dados de terceiros como originários da API oficial.
