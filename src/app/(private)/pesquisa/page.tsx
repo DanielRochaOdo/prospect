@@ -152,7 +152,7 @@ export default function Pesquisa(){
     <div className="prospect-contact-grid"><div className={`prospect-contact ${item.phone?'has-phone':''}`}><Phone size={16}/><div><small>TELEFONE</small>{item.phone?<a href={`tel:${normalizePhone(item.phone)}`}>{item.phone}</a>:<span>Não informado</span>}</div></div><div className="prospect-contact"><Mail size={16}/><div><small>E-MAIL</small>{item.email?<a href={`mailto:${item.email}`}>{item.email}</a>:<span>Não informado</span>}</div></div></div>
     {item.address&&<p className="prospect-address">{item.address}</p>}
     <div className="prospect-managers">
-     <div className="prospect-managers-head"><UsersRound size={17}/><strong>Gestores e decisores</strong><span className="muted-small">RH, Benefícios, Diretoria e sócios-administradores</span></div>
+     <div className="prospect-managers-head"><UsersRound size={17}/><strong>Gestores e decisores</strong><span className="muted-small">Identificação automática: RH, Departamento Pessoal, benefícios, diretoria e QSA</span></div>
      {peopleByRoot[item.cnpjRoot]?.state==='loading'||!peopleByRoot[item.cnpjRoot]?
       <p className="prospect-people-loading"><LoaderCircle size={15} className="prospect-spin"/> Pesquisando gestores automaticamente...</p>:
       peopleByRoot[item.cnpjRoot]?.state==='error'?
@@ -167,8 +167,12 @@ export default function Pesquisa(){
           </a>}
         </div>
        </div>)}</div>:
-       <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado automaticamente com correspondência confiável nas fontes conectadas.</p>}
-     <p className="muted-small" style={{marginTop:9}}>Gestores e cargos vêm das fontes indicadas acima, sem necessidade de e-mail ou telefone. Links de perfis, quando existentes, são fornecidos pela Exa e não pela API oficial do LinkedIn. A Lead Sync API não permite buscar funcionários de outras empresas.</p>
+       <p className="muted-small" style={{marginTop:10}}>Nenhum profissional de RH, DP ou gestor confirmado pelas fontes disponíveis nesta consulta.</p>}
+     {peopleByRoot[item.cnpjRoot]?.result&&
+      <p className="muted-small" style={{marginTop:9}} aria-label="Situação das fontes de gestores">
+       {peopleByRoot[item.cnpjRoot].result!.statuses.map(s=>({exa:'Exa',apollo:'Apollo',hunter:'Hunter',opencnpj:'OpenCNPJ'}[s.provider]+': '+(s.state==='ok'?'consultada':s.state==='error'?'indisponível':'dispensada'))).join(' · ')}
+      </p>}
+     <p className="muted-small" style={{marginTop:9}}>Nomes, cargos e empresas são apresentados sem exigir e-mail ou telefone. A Exa é a fonte principal; Apollo, Hunter e OpenCNPJ atuam quando faltam gestores. Nenhum dado é obtido da API Lead Sync do LinkedIn.</p>
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}

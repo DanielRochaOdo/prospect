@@ -3,14 +3,11 @@
 import {useEffect, useMemo, useState} from 'react';
 import {
   AlertTriangle, ArrowUpRight, Building2, Cloud, Gauge, Info,
-  Network, Save, ShieldCheck, UsersRound, ContactRound, Link2
+  Network, Save, ShieldCheck, UsersRound, ContactRound
 } from 'lucide-react';
 import {apiRequest, patch, post} from '@/lib/client';
 
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
-type LinkedInStatus={configured:boolean;connected:boolean;active:boolean;expiresAt:string|null;scopes:string|null};
-type LinkedInAccount={id:string;name:string;status:string;reference:string;test:boolean};
-type LinkedInForm={id:string;name:string;state:string;version:number|null;created:number|null};
 type Provider='cnpjai'|'localiza'|'fichario'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
 type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'qsa'|'domain_finder'|'domain_search';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
 
@@ -19,9 +16,9 @@ const providerInfo=[
   {id:'cnpjai' as const,name:'CNPJ.ai',subtitle:'Consulta de CNPJ, matrizes e filiais',summary:'Sem cota mensal publicada · 60 chamadas/min por conta, compartilhadas',url:'https://cnpj.ai/api/docs',icon:Network,tag:'Gratuito'},
   {id:'localiza' as const,name:'LocalizaCNPJ',subtitle:'Busca por segmento, CNAE e localização',summary:'Plano Free: 2.000 consultas/mês · 40 chamadas/min',url:'https://localizacnpj.com.br/portal-api',icon:Building2,tag:'Plano Free'},
   {id:'opencnpj' as const,name:'OpenCNPJ',subtitle:'Sócios e administradores identificados pelo CNPJ',summary:'API pública sem chave: até 300 req/min por IP. Teto interno configurado: 3.000/mês e 120/min.',url:'https://opencnpj.com/api',icon:ContactRound,tag:'Gratuito'},
-  {id:'exa' as const,name:'Exa People Search',subtitle:'Gestores de RH, benefícios e direção por empresa',summary:'Créditos mensais por valor gasto. Teto interno de 400 consultas/mês e 5/min; configure orçamento também na Exa.',url:'https://exa.ai/pricing',icon:UsersRound,tag:'Créditos gratuitos'},
-  {id:'apollo' as const,name:'Apollo',subtitle:'Busca de gestores por empresa e cargo',summary:'People API Search: 0 créditos (sujeito à permissão da chave e elegibilidade). Teto interno: 300/mês e 5/min.',url:'https://docs.apollo.io/reference/people-api-search',icon:UsersRound,tag:'Busca sem créditos'},
-  {id:'hunter' as const,name:'Hunter',subtitle:'Localizar domínio e identificar gestores',summary:'Domain Finder é gratuito; Domain Search pode consumir créditos. Teto interno da busca: 40/mês.',url:'https://hunter.io/api-documentation/v2/',icon:ContactRound,tag:'Créditos limitados'},
+  {id:'exa' as const,name:'Exa People Search',subtitle:'Fonte principal: profissionais de RH, DP, benefícios e direção',summary:'Créditos mensais por valor gasto. Teto interno de 400 consultas/mês e 5/min; configure orçamento também na Exa.',url:'https://exa.ai/pricing',icon:UsersRound,tag:'Créditos gratuitos'},
+  {id:'apollo' as const,name:'Apollo',subtitle:'Fallback: gestores e profissionais por empresa e cargo',summary:'People API Search: 0 créditos (sujeito à permissão da chave e elegibilidade). Teto interno: 300/mês e 5/min.',url:'https://docs.apollo.io/reference/people-api-search',icon:UsersRound,tag:'Busca sem créditos'},
+  {id:'hunter' as const,name:'Hunter',subtitle:'Fallback: domínio e profissionais quando ainda faltam gestores',summary:'Domain Finder é gratuito; Domain Search pode consumir créditos. Teto interno da busca: 40/mês.',url:'https://hunter.io/api-documentation/v2/',icon:ContactRound,tag:'Créditos limitados'},
   {id:'google' as const,name:'Google Places',subtitle:'Pesquisa contextual de estabelecimentos',summary:'Text Search Pro: 5.000/mês; com telefone (Enterprise): 1.000/mês. Os limites por minuto são controles internos.',url:'https://developers.google.com/maps/billing-and-pricing/pricing',icon:Cloud,tag:'Pro + Enterprise'},
 ];
 const operationName:Record<Limit['operation'],string>={basic:'Consulta básica',branches:'Matrizes e filiais',search:'Pesquisa de empresas',text_pro:'Pesquisa por texto (sem telefone)',text_enterprise:'Pesquisa contextual com telefone',people_search:'Pesquisa de gestores',qsa:'Sócios e administradores (QSA)',domain_finder:'Descoberta de domínio',domain_search:'Busca de gestores por domínio'};
@@ -40,20 +37,6 @@ export default function Configuracoes(){
   const [error,setError]=useState('');
   const [message,setMessage]=useState('');
   const [saving,setSaving]=useState('');
-  const [linkedin,setLinkedin]=useState<LinkedInStatus|null>(null);
-  const [linkedinLoading,setLinkedinLoading]=useState(true);
-  const [linkedinError,setLinkedinError]=useState('');
-  const [disconnecting,setDisconnecting]=useState(false);
-  const [linkedinAccounts,setLinkedinAccounts]=useState<LinkedInAccount[]>([]);
-  const [selectedLinkedInAccount,setSelectedLinkedInAccount]=useState('');
-  const [linkedinForms,setLinkedinForms]=useState<LinkedInForm[]>([]);
-  const [linkedinTestError,setLinkedinTestError]=useState('');
-  const [accountsLoading,setAccountsLoading]=useState(false);
-  const [formsLoading,setFormsLoading]=useState(false);
-  const [accountsTested,setAccountsTested]=useState(false);
-  const [formsTested,setFormsTested]=useState(false);
-  const [accountsHasMore,setAccountsHasMore]=useState(false);
-  const [formsHasMore,setFormsHasMore]=useState(false);
 
   useEffect(()=>{
     apiRequest<{limits:Limit[]}>('/api/limits')
@@ -61,14 +44,7 @@ export default function Configuracoes(){
       .catch((e:Error)=>setError(e.message))
       .finally(()=>setLoading(false));
     refreshSegments();
-    apiRequest<LinkedInStatus>('/api/integrations/linkedin/status')
-      .then(setLinkedin).catch((e:Error)=>setLinkedinError(e.message)).finally(()=>setLinkedinLoading(false));
-    const outcome=new URLSearchParams(window.location.search).get('linkedin');
-    if(outcome==='connected')setMessage('LinkedIn autorizado. Os formulários ainda não são sincronizados automaticamente.');
-    if(outcome==='error')setLinkedinError('Não foi possível concluir a autorização. Verifique o redirect, as permissões e o banco.');
-    if(outcome==='denied')setLinkedinError('Autorização cancelada ou negada no LinkedIn.');
-    if(outcome==='configuration')setLinkedinError('Configure as variáveis LINKEDIN_* antes de conectar.');
-    if(outcome==='auth')setLinkedinError('Faça login como administrador antes de conectar.');
+
   },[]);
 
   const groups=useMemo(()=>providerInfo.map(info=>({info,items:rows.map((row,index)=>({row,index})).filter(({row})=>row.provider===info.id)})),[rows]);
@@ -103,37 +79,6 @@ export default function Configuracoes(){
     finally{setSaving('');}
   }
 
-  async function testLinkedInAccounts(){
-    setAccountsLoading(true);setLinkedinTestError('');setAccountsTested(false);
-    setLinkedinForms([]);setFormsTested(false);
-    try{
-      const data=await apiRequest<{accounts:LinkedInAccount[];hasMore:boolean}>('/api/integrations/linkedin/ad-accounts');
-      setLinkedinAccounts(data.accounts);setAccountsHasMore(data.hasMore);
-      setSelectedLinkedInAccount(data.accounts[0]?.id??'');
-      setAccountsTested(true);
-    }catch(e){setLinkedinTestError((e as Error).message);}
-    finally{setAccountsLoading(false);}
-  }
-  async function testLinkedInForms(){
-    if(!selectedLinkedInAccount)return;
-    setFormsLoading(true);setLinkedinTestError('');setFormsTested(false);
-    try{
-      const data=await apiRequest<{forms:LinkedInForm[];hasMore:boolean}>('/api/integrations/linkedin/forms?accountId='+encodeURIComponent(selectedLinkedInAccount));
-      setLinkedinForms(data.forms);setFormsHasMore(data.hasMore);setFormsTested(true);
-    }catch(e){setLinkedinTestError((e as Error).message);}
-    finally{setFormsLoading(false);}
-  }
-
-  async function disconnectLinkedIn(){
-    if(!window.confirm('Desconectar o LinkedIn do Prospect?'))return;
-    setDisconnecting(true);setLinkedinError('');
-    try{
-      await post('/api/integrations/linkedin/disconnect',{});
-      setLinkedin(prev=>prev?{...prev,connected:false,active:false,expiresAt:null}:prev);
-      setMessage('Conexão LinkedIn removida. Você pode autorizar novamente.');
-    }catch(e){setLinkedinError((e as Error).message);}
-    finally{setDisconnecting(false);}
-  }
 
   return <>
     <div className="page-head"><div><span className="eyebrow">ADMINISTRAÇÃO</span><h1>Configurações</h1><p>Gerencie os limites, integrações e categorias de pesquisa.</p></div></div>
@@ -189,59 +134,14 @@ export default function Configuracoes(){
 
     <section className="panel section-space" aria-labelledby="linkedin-heading">
       <div className="split-between">
-        <div><h2 id="linkedin-heading" className="panel-title">LinkedIn Lead Sync</h2><p className="panel-subtitle">Conecte a conta autorizada a receber leads dos formulários do LinkedIn.</p></div>
-        <Link2 size={21}/>
+        <div><h2 id="linkedin-heading" className="panel-title">LinkedIn Lead Sync — desativado</h2>
+          <p className="panel-subtitle">A integração de formulários não participa da prospecção de gestores. Nenhuma chamada é feita ao LinkedIn pelo Prospect.</p>
+        </div>
+        <ShieldCheck size={21}/>
       </div>
-      {linkedinError&&<div className="alert error section-space" role="alert">{linkedinError}</div>}
-      {linkedinLoading?<p className="muted-small section-space">Verificando autorização LinkedIn...</p>:
-       <div className="section-space">
-        <p><strong>Conexão:</strong> {!linkedin?.configured?'Credenciais não configuradas':!linkedin?.connected?'Ainda não autorizada':linkedin.active?'Autorizada':'Token expirado'}</p>
-        {linkedin?.connected&&<p className="muted-small">Validade do token: {linkedin.expiresAt?new Date(linkedin.expiresAt).toLocaleDateString('pt-BR'):'não informada'}. Ao expirar, autorize novamente.</p>}
-        <div className="result-actions section-space">
-         {linkedin?.configured&&<a className="btn primary" href="/api/integrations/linkedin/connect">{linkedin.connected?'Reconectar LinkedIn':'Autorizar LinkedIn'}</a>}
-         {linkedin?.connected&&<button type="button" className="btn outline" disabled={disconnecting} onClick={disconnectLinkedIn}>{disconnecting?'Desconectando...':'Desconectar'}</button>}
-        </div>
-       </div>}
-
-      {linkedin?.connected&&linkedin.active&&<div className="section-space" style={{borderTop:'1px solid var(--line)',paddingTop:18}}>
-        <h3 style={{fontSize:15,marginBottom:8}}>Testar acesso aos formulários</h3>
-        <p className="muted-small">Teste somente de leitura: consulta contas e nomes de formulários autorizados. Não baixa respostas, não importa contatos e não altera campanhas.</p>
-        {linkedinTestError&&<div className="alert error section-space" role="alert">{linkedinTestError}</div>}
-        <div className="result-actions section-space">
-          <button type="button" className="btn outline" disabled={accountsLoading||formsLoading} onClick={()=>void testLinkedInAccounts()}>
-            {accountsLoading?'Consultando contas...':'1. Verificar contas de anúncios'}
-          </button>
-        </div>
-        {accountsTested&&<>
-          {linkedinAccounts.length===0?
-            <div className="alert section-space">O LinkedIn não retornou contas de anúncios acessíveis para esta autorização. Verifique suas permissões no Campaign Manager.</div>:
-            <div className="section-space">
-              <p className="muted-small">{linkedinAccounts.length} conta(s) acessível(is){accountsHasMore?' (as 100 primeiras; há outras páginas)':''}.</p>
-              <label style={{display:'block',maxWidth:500}}>Conta de anúncios
-                <select value={selectedLinkedInAccount} onChange={e=>{setSelectedLinkedInAccount(e.target.value);setLinkedinForms([]);setFormsTested(false);}}>
-                  {linkedinAccounts.map(account=><option value={account.id} key={account.id}>{account.name} · #{account.id}{account.test?' (teste)':''}</option>)}
-                </select>
-              </label>
-              <div className="result-actions section-space">
-                <button type="button" className="btn primary" disabled={!selectedLinkedInAccount||formsLoading} onClick={()=>void testLinkedInForms()}>
-                  {formsLoading?'Consultando formulários...':'2. Consultar formulários'}
-                </button>
-              </div>
-            </div>}
-        </>}
-        {formsTested&&<div className="section-space" aria-live="polite">
-          <p><strong>{linkedinForms.length} formulário(s) localizado(s)</strong>{formsHasMore?' (primeiros 50)':''}</p>
-          {linkedinForms.length===0?
-            <p className="muted-small">Acesso confirmado, mas não há formulários retornados para essa conta. Confira se existem formulários de geração de leads no Campaign Manager.</p>:
-            <div className="table-wrapper section-space"><table className="data-table">
-              <thead><tr><th>Formulário</th><th>ID</th><th>Situação</th></tr></thead>
-              <tbody>{linkedinForms.map(form=><tr key={form.id}><td>{form.name}</td><td>{form.id}</td><td>{form.state||'Não informada'}</td></tr>)}</tbody>
-            </table></div>}
-        </div>}
-      </div>}
-      <p className="muted-small section-space">O teste verifica apenas contas e metadados dos formulários. A consulta das respostas dos formulários e a importação automática ao CRM ainda não estão implementadas. A Lead Sync API não permite pesquisar livremente gestores de outras empresas.</p>
+      <p className="muted-small section-space">As credenciais e a autorização anteriormente cadastradas foram preservadas, sem exclusão de dados. A identificação automática de profissionais utiliza Exa como fonte principal, seguida por Apollo, Hunter e OpenCNPJ quando necessário.</p>
     </section>
 
-    <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY, GOOGLE_PLACES_API_KEY, EXA_API_KEY, APOLLO_API_KEY, HUNTER_API_KEY e as quatro variáveis LINKEDIN_* nas variáveis de ambiente. O OpenCNPJ não exige chave. Consulte o README para as etapas de deploy.</div></section>
+    <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY, GOOGLE_PLACES_API_KEY, EXA_API_KEY, APOLLO_API_KEY, HUNTER_API_KEY nas variáveis de ambiente. O OpenCNPJ não exige chave. Consulte o README para as etapas de deploy.</div></section>
   </>;
 }

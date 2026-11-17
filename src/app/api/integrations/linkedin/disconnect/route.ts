@@ -1,9 +1,4 @@
-import {api,json} from '@/lib/api';
-import {db} from '@/lib/db';
-import {audit} from '@/lib/auth';
+import {api,AppError} from '@/lib/api';
 export const runtime='nodejs';
-export const POST=api(async(_req,user)=>{
- await db()`DELETE FROM linkedin_oauth_connections WHERE id='primary'`;
- await audit(user.id,'disconnect','linkedin_oauth','primary');
- return json({ok:true});
-},{admin:true,write:true});
+// O histórico de autenticação e o token criptografado são preservados.
+export const POST=api(async()=>{throw new AppError(410,'Integração LinkedIn Lead Sync desativada para a prospecção. Nenhum dado ou token foi excluído.');},{admin:true,write:true});

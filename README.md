@@ -102,30 +102,20 @@ Os setores são atalhos de pesquisa e **não restringem o uso do sistema**: o us
 Ao rodar `node --env-file=.env.local scripts/migrate.mjs` após atualizar o código, a migração remove somente os cinco segmentos odontológicos do *seed* antigo que permaneçam com nome, termo, CNAE e status originais. Segmentos personalizados são preservados. Os novos setores são incluídos apenas quando ainda não existirem.
 
 
-### Identificação automática de gestores (OpenCNPJ, Exa, Apollo e Hunter)
+### Identificação automática de gestores (Exa prioritária, Apollo/Hunter/OpenCNPJ como alternativas)
 
-A tela **Pesquisar empresas** mostra automaticamente nomes e cargos para empresas da página aberta, sem campo de site e sem botão separado. Matriz e filiais compartilham uma consulta por raiz de CNPJ durante a sessão. As informações cadastrais são mantidas separadas dos resultados contextuais do Google Maps.
+Em **Pesquisar empresas**, a identificação de gestores é automática e sequencial por raiz de CNPJ na página aberta, com intervalo entre empresas e sem exigir e-mail nem telefone. A tela mostra nome, cargo, organização e fonte de cada profissional identificado. Nomes parciais são rotulados.
 
-- **OpenCNPJ** (sem chave): consulta o QSA pelo CNPJ completo. Sócios e administradores são exibidos com sua qualificação, sem confundi-los com gestores de RH.
-- **Exa** (`EXA_API_KEY`): busca perfis públicos de RH, benefícios e diretoria a partir do nome empresarial, com validação do vínculo. Usa créditos monetários de acordo com o plano da conta.
-- **Apollo** (`APOLLO_API_KEY`): usa o endpoint People API Search com domínio empresarial confirmado pelo Hunter Domain Finder, sem exigir que o usuário forneça o site. A chamada não consome créditos Apollo, mas exige permissão para `api/v1/mixed_people/api_search` e conta elegível. O sobrenome pode vir parcialmente oculto.
-- **Hunter** (`HUNTER_API_KEY`): tenta descobrir o domínio corporativo pelo Domain Finder (sem créditos), com correspondência rigorosa por nome de empresa. Quando não foi identificado um profissional completo de RH/Benefícios nas outras fontes, consulta o Domain Search com até 10 contatos por chamada (pode consumir créditos). A aplicação não armazena e-mails ou telefones pessoais retornados.
+1. **Exa People Search** (`EXA_API_KEY`): fonte principal de perfis de RH, Departamento Pessoal (DP), benefícios, folha de pagamento e diretoria. Usa uma chamada por empresa ao endpoint oficial `/search`, restringindo a `exa.ai/library/person`, com até 10 perfis; verifica vínculo atual, cargo e nome antes de apresentar.
+2. **Apollo People API Search** (`APOLLO_API_KEY`): fallback quando não há pelo menos dois profissionais de RH/DP/benefícios com nome completo. Pesquisa por cargo e domínio confirmado via Hunter Domain Finder, evitando confundir empresas homônimas. Pode trazer sobrenomes parcialmente ocultos. A busca não exige e-mail ou telefone.
+3. **Hunter Domain Search** (`HUNTER_API_KEY`): entra quando ainda faltam profissionais. Domain Finder é usado para descobrir o domínio e não consome créditos de busca; Domain Search pode consumir créditos e é limitado a uma página de até 10 resultados. Somente nomes e cargos são devolvidos ao usuário.
+4. **OpenCNPJ** (sem chave): último fallback para QSA (sócios e administradores), sem apresentá-los como gestores de RH quando o cargo não indica isso.
 
-As consultas são independentes e protegidas pelos limites administrativos: OpenCNPJ 3.000/mês, Exa 400/mês, Apollo 300/mês, Hunter Domain Finder 300/mês, Hunter Domain Search 40/mês como tetos internos iniciais. Eles não representam franquias oficiais. Se uma API falhar ou não possuir credencial, a busca empresarial e as outras integrações continuam funcionando. Sem uma correspondência segura de domínio o Apollo não pesquisa empresas homônimas.
+Quando a Exa já identifica dois profissionais de RH/DP com nome completo, as consultas complementares são dispensadas para poupar créditos. Se uma fonte falha, as demais continuam quando necessário. O painel mostra o estado de cada fonte e continua ordenando RH/DP antes de cargos societários.
 
-**Colocação correta das credenciais:** o arquivo `.env.example` é apenas um modelo e é versionado no GitHub. Edite o arquivo **`.env.local`** na raiz do projeto e adicione:
+Os tetos internos iniciais são Exa 400/mês, Apollo 300/mês, Hunter Domain Finder 300/mês, Hunter Domain Search 40/mês e OpenCNPJ 3.000/mês. São limites de proteção do Prospect, não cotas oficiais. Nenhuma credencial, variável de ambiente ou migração Neon é alterada por esta atualização. Para testes reais, as chaves já devem estar configuradas na Vercel.
 
-```dotenv
-EXA_API_KEY="SUA_CHAVE_EXA"
-APOLLO_API_KEY="SUA_CHAVE_APOLLO"
-HUNTER_API_KEY="SUA_CHAVE_HUNTER"
-```
-
-Preserve no `.env.local` o `DATABASE_URL` e as outras chaves já configuradas. Reinicie `npm run dev` após alterar variáveis. Na Vercel, cadastre-as manualmente em **Project Settings → Environment Variables**.
-
-Se você já colocou chaves reais no `.env.example`, apague-as desse arquivo e **não envie ao GitHub**. Se alguma chave já tiver sido publicada, revogue-a no provedor e gere outra; retirar apenas do commit mais recente não impede o acesso à credencial no histórico.
-
-Após atualizar o código, execute `node --env-file=.env.local scripts/migrate.mjs` para recriar as configurações de Apollo/Hunter. A migração é idempotente, preserva limites editados no painel e não precisa ser executada novamente em cada acesso. Contatos de gestores não são salvos automaticamente no CRM; exportação XLSX depende dos resultados obtidos e dos termos/LGPD.
+**Privacidade:** somente nome, cargo, empresa e fonte são apresentados na pesquisa de gestores. E-mails e telefones pessoais obtidos dos provedores não são enviados ao navegador nem exportados. Verifique os termos dos fornecedores e a LGPD.
 ### Paginação e contagem dos resultados (10 por página)
 
 A pesquisa apresenta **10 empresas por página**, com navegação **Anterior/Próxima**. Páginas já consultadas ficam em memória no navegador para retornar sem consumir a API novamente. Quando uma página ainda não foi carregada, a aplicação continua a paginação por cursor, conciliando matrizes/filiais e evitando duplicação por CNPJ. A exportação usa **todos os resultados carregados**, não apenas a página visível. A identificação automática de gestores ocorre para as empresas da página aberta, economizando créditos.
@@ -210,7 +200,13 @@ npm run dev
 
 A exportação valida apenas o mínimo necessário para gerar a planilha (CNPJ com 14 posições, nome opcional e fonte cadastral permitida), sem exigir que campos públicos como e-mail satisfaçam as regras rígidas do cadastro de leads. Registros isolados incompletos não derrubam a exportação dos demais. O endpoint aceita somente dados cadastrais, não dados do Google Maps, e preserva o CNPJ como texto.
 
-## LinkedIn Lead Sync — OAuth (domínio de produção)
+## LinkedIn Lead Sync — INATIVO (implementação histórica abaixo)
+
+**Situação em novembro de 2026:** a integração LinkedIn Lead Sync foi desativada no Prospect porque ela não permite buscar funcionários e gestores de empresas arbitrárias. O painel apresenta somente um aviso de desativação e todas as rotas `/api/integrations/linkedin/` impedem novas consultas, autorizações ou exclusões. O status de integração retorna `enabled:false`.
+
+**Preservação:** o código não apagou nem revogou credenciais ou tokens já armazenados no Neon. O token OAuth poderá expirar normalmente. Para identificar pessoas de RH, DP e diretoria, o fluxo ativo é Exa → Apollo → Hunter → OpenCNPJ. As instruções OAuth abaixo são somente registro histórico e **não devem ser executadas enquanto o recurso estiver inativo**.
+
+### Configuração OAuth anterior (não executar com a integração inativa)
 
 A aplicação permite **autorizar e armazenar de forma criptografada o token OAuth** de uma conta LinkedIn para o produto Lead Sync API. Essa primeira etapa **não sincroniza formulários ou leads automaticamente** e **não permite descobrir funcionários arbitrários**: os recursos posteriores só se aplicam aos leads recebidos por formulários próprios, nas organizações ou contas de anúncios às quais a conta autorizada tem acesso.
 
@@ -230,7 +226,7 @@ A aplicação permite **autorizar e armazenar de forma criptografada o token OAu
 **Segurança:** nunca envie `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_TOKEN_ENCRYPTION_KEY` ou códigos/tokens OAuth em prints, commits ou chats. Todas as rotas de status e administração exigem usuário administrador autenticado. A URL de retorno é pública, mas valida o cookie `state` e a sessão do administrador.
 
 
-### Teste de leitura das contas e formulários do LinkedIn
+### Testes de formulários (desativados)
 
 Depois de configurar OAuth e confirmar `configured: true`, `connected: true`, `active: true` em `/api/integrations/linkedin/status`, abra **Configurações → LinkedIn Lead Sync → Testar acesso aos formulários**:
 
@@ -242,7 +238,7 @@ As rotas autenticadas de teste são `/api/integrations/linkedin/ad-accounts` e `
 
 Este teste **não** sincroniza leads nem faz alterações na conta LinkedIn.
 
-### Gestores e decisores: fontes automáticas e limites do LinkedIn
+### Distinção entre Lead Sync e busca profissional
 
 O Prospect busca automaticamente nomes e cargos por Exa People Search, Apollo, Hunter e OpenCNPJ, mesmo quando não existe e-mail nem telefone. A fonte é identificada para cada gestor encontrado.
 

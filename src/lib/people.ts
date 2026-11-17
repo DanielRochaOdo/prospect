@@ -1,4 +1,5 @@
 import {verifiedLinkedInProfileUrl} from './linkedin-profile.ts';
+import {isHrOrDpRole} from './people-priority.ts';
 /** Gestores profissionais e responsáveis societários identificados por fontes diferentes. */
 export type PeopleProvider='exa'|'opencnpj'|'apollo'|'hunter';
 export type DecisionMaker={
@@ -33,7 +34,7 @@ export function mapOpenCnpjPeople(payload:unknown,cnpj:string,companyName:string
   return [{name,role,organization:text(data.razaoSocial)||companyName,source:'opencnpj' as const,partialName:false}];
  });
 }
-const roles=/\b(?:gerente|diretor(?:a)?|coordenador(?:a)?|presidente|vice[- ]presidente|s[oó]cio[- ]administrador|administrador(?:a)?|head of|head|ceo|cfo|coo|chro|chief (?:people|human resources|executive|operating|financial) officer|hr manager|human resources manager|benefits manager|people and culture manager)\b/iu;
+const roles=/\b(?:gerente|diretor(?:a)?|coordenador(?:a)?|supervisor(?:a)?|analista(?: s[eê]nior| pleno| j[uú]nior)?(?: de| do| da| em)? (?:rh|dp|recursos humanos|departamento pessoal|benef[ií]cios|folha de pagamento)|assistente (?:de|do|da) (?:rh|dp|recursos humanos|departamento pessoal)|especialista (?:em|de) (?:rh|dp|recursos humanos|departamento pessoal|benef[ií]cios)|respons[aá]vel (?:por|pelos?|de) (?:rh|dp|recursos humanos|departamento pessoal|benef[ií]cios)|business partner(?: de rh)?|presidente|vice[- ]presidente|s[oó]cio[- ]administrador|administrador(?:a)?|head of|head|ceo|cfo|coo|chro|chief (?:people|human resources|executive|operating|financial) officer|hr manager|human resources manager|benefits manager|payroll manager|people and culture manager|people operations manager)\b/iu;
 const forbiddenName=/\b(?:gerente|diretor|coordenador|empresa|recursos|executive|manager|administrador|linkedin|profile)\b/i;
 const isName=(s:string)=>s.length<=100&&/^[\p{L}][\p{L}'-]+(?:\s+[\p{L}][\p{L}'-]+){1,5}$/u.test(s)&&!forbiddenName.test(normalize(s));
 const extractRole=(s:string)=>{
@@ -83,13 +84,14 @@ export function mapExaPeople(payload:unknown,companyName:string,tradeName?:strin
 }
 const weight=(role:string)=>{
  const r=normalize(role);
- if(/\brh\b|recursos humanos|human resources|beneficios|benefits|departamento pessoal|people operations|people and culture/.test(r))return 50;
+ if(isHrOrDpRole(role))return /gerente|manager|diretor|director|coordenador|coordenadora|supervisor|head|responsavel|chro|chief|lead/.test(r)?60:50;
  if(/diretor|director|gerente|manager|coordenad|coordinator|head|ceo|presidente|president|socio|owner|administra|chro|cfo/.test(r))return 25;
  return 0;
 };
 export function mergeDecisionMakers(people:DecisionMaker[],limit=8):DecisionMaker[]{
  const list=people.filter(p=>!!p.name&&!!p.role&&weight(p.role)>0)
-  .sort((a,b)=>weight(b.role)-weight(a.role)||Number(!!b.linkedinUrl)-Number(!!a.linkedinUrl)||Number(a.source==='opencnpj')-Number(b.source==='opencnpj'));
+  .sort((a,b)=>weight(b.role)-weight(a.role)||Number(!!b.linkedinUrl)-Number(!!a.linkedinUrl)||
+   (['exa','apollo','hunter','opencnpj'].indexOf(a.source)-['exa','apollo','hunter','opencnpj'].indexOf(b.source)));
  const seen=new Set<string>();const out:DecisionMaker[]=[];
  for(const item of list){
   const key=normalize(item.name);
