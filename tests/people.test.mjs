@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mapOpenCnpjPeople,mapExaPeople,mapApolloPeople,mapHunterPeople,mergeDecisionMakers,organizationMatches,validCorporateDomain} from '../src/lib/people.ts';
 import {buildXlsx} from '../src/lib/xlsx.ts';
+import {verifiedLinkedInProfileUrl,linkedinPeopleSearchUrl} from '../src/lib/linkedin-profile.ts';
 test('OpenCNPJ associa QSA somente ao CNPJ idêntico',()=>{
  const data={success:true,data:{cnpj:'00000000000191',razaoSocial:'BANCO DO BRASIL SA',
  socios:[{nomeSocio:'MARIA SILVA',descricao:'Presidente'},{nomeSocio:'JOAO PEREIRA',descricao:'Sócio-Administrador'}]}};
@@ -54,4 +55,45 @@ test('Hunter retorna nome/cargo sem expor e-mail e rejeita empresa incorreta',()
  assert.equal(mapHunterPeople(response,'Outra Empresa',false).length,0);
  assert.equal(validCorporateDomain('acme.com.br'),'acme.com.br');
  assert.equal(validCorporateDomain('gmail.com'),null);
+});
+
+test('Exa preserva link real de perfil LinkedIn quando há vínculo profissional evidenciado',()=>{
+ const payload={results:[{
+  title:'Ana Souza',url:'https://www.linkedin.com/in/ana-souza-rh/?trk=teste',
+  text:'Gerente de Recursos Humanos na Empresa Acme Serviços Ltda. Atualmente coordena RH.'
+ }]};
+ const found=mapExaPeople(payload,'Empresa Acme Serviços Ltda');
+ assert.equal(found.length,1);
+ assert.equal(found[0].linkedinUrl,'https://www.linkedin.com/in/ana-souza-rh/');
+});
+test('URLs falsas ou irrelevantes não são apresentadas como perfis do LinkedIn',()=>{
+ const invalid=[
+  'https://linkedin.com.evil.example/in/fulano',
+  'https://www.linkedin.com/company/12345',
+  'https://www.linkedin.com/search/results/people/?keywords=RH',
+  'javascript:alert(1)',
+  'http://www.linkedin.com/in/pessoa',
+  'https://www.linkedin.com@evil.example/in/pessoa'
+ ];
+ for(const url of invalid)assert.equal(verifiedLinkedInProfileUrl(url),null,url);
+ const payload={results:[{
+  title:'Ana Souza',url:'https://example.org/in/ana',
+  text:'Gerente de Recursos Humanos na Empresa Acme Serviços Ltda.'
+ }]};
+ assert.equal(mapExaPeople(payload,'Empresa Acme Serviços Ltda')[0].linkedinUrl,undefined);
+});
+test('Pesquisa LinkedIn é um link externo manual e não inventa perfis individuais',()=>{
+ const url=new URL(linkedinPeopleSearchUrl('ACME SERVICOS LTDA','ACME','Ana Souza'));
+ assert.equal(url.origin,'https://www.linkedin.com');
+ assert.equal(url.pathname,'/search/results/people/');
+ assert.match(url.searchParams.get('keywords')||'',/Ana Souza/);
+ assert.match(url.searchParams.get('keywords')||'',/ACME/);
+});
+test('Deduplicação prefere perfil profissional verificável em caso de empate de cargo',()=>{
+ const merged=mergeDecisionMakers([
+  {name:'Ana Souza',role:'Gerente de RH',organization:'Acme',source:'apollo',partialName:false},
+  {name:'Ana Souza',role:'Gerente de RH',organization:'Acme',source:'exa',partialName:false,linkedinUrl:'https://www.linkedin.com/in/ana-souza'}
+ ]);
+ assert.equal(merged.length,1);
+ assert.equal(merged[0].linkedinUrl,'https://www.linkedin.com/in/ana-souza');
 });

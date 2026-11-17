@@ -241,3 +241,11 @@ Depois de configurar OAuth e confirmar `configured: true`, `connected: true`, `a
 As rotas autenticadas de teste são `/api/integrations/linkedin/ad-accounts` e `/api/integrations/linkedin/forms?accountId=ID`. Exigem usuário administrador no Prospect. O cabeçalho `Linkedin-Version: 202610` é uma versão de referência que deve ser atualizada antes do seu sunset conforme a política de versões do LinkedIn.
 
 Este teste **não** sincroniza leads nem faz alterações na conta LinkedIn.
+
+### Verificação de gestores no LinkedIn
+
+Em **Pesquisar empresas**, cada resultado apresenta **Pesquisar gestores no LinkedIn**, um link para a pesquisa de pessoas no próprio site. Esse acesso é manual e depende da sessão e da visibilidade de perfis do usuário no LinkedIn. A busca pode mostrar homônimos: sempre confirme o emprego atual e o cargo.
+
+O mecanismo de gestores continua consultando **Exa People Search**, **Apollo**, **Hunter** e **OpenCNPJ**. A Exa utiliza uma base de perfis profissionais com cargos e empregadores. Quando a Exa retorna uma URL genuína no formato `https://www.linkedin.com/in/...`, ela é exibida como **Ver perfil LinkedIn**, somente após validação do nome, cargo e vínculo empresarial. Caso não exista URL confirmada, a opção é **Procurar esta pessoa no LinkedIn** (busca manual, não representa perfil verificado). O nome e o cargo podem estar disponíveis mesmo sem telefone ou e-mail.
+
+**Não existe busca generalizada de funcionários via autorização LinkedIn Lead Sync.** O OAuth aprovado se limita a leads de formulários autorizados. A aplicação não usa raspagem, cookies de sessão, API não oficial, nem automatiza pesquisas dentro da interface do LinkedIn. Os nomes/cargos exibidos são atribuídos aos fornecedores que os forneceram. Não atribuir dados da Exa à API oficial do LinkedIn.

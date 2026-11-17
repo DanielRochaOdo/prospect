@@ -9,6 +9,7 @@ import {apiRequest,post,formatCnpj} from '@/lib/client';
 import type {CompanyResult,PlaceResult} from '@/services/providers';
 import type {DecisionMaker} from '@/lib/people';
 import {SearchableMultiSelect,type SelectOption} from '@/components/SearchableMultiSelect';
+import {linkedinPeopleSearchUrl} from '@/lib/linkedin-profile';
 
 type Query={cnpj:string;name:string;sector:string[];segment:string[];cnae:string[];city:string[];state:string[];district:string[];activeOnly:boolean;branches:'all'|'headquarters'|'branches';pageSize:number;cursor?:string};
 type Status={service:'cnpjai'|'localiza'|'fichario'|'google';state:'ok'|'error'|'skipped';message?:string};
@@ -153,15 +154,30 @@ export default function Pesquisa(){
     {item.address&&<p className="prospect-address">{item.address}</p>}
     <div className="prospect-managers">
      <div className="prospect-managers-head"><UsersRound size={17}/><strong>Gestores e decisores</strong><span className="muted-small">RH, Benefícios, Diretoria e sócios-administradores</span></div>
+     <div className="result-actions" style={{marginTop:10,marginBottom:10}}>
+      <a className="btn small outline" href={linkedinPeopleSearchUrl(item.legalName,item.tradeName)} target="_blank" rel="noopener noreferrer" title="Abre a pesquisa diretamente no site LinkedIn, não usa a Lead Sync API">
+       <ExternalLink size={15}/> Pesquisar gestores no LinkedIn
+      </a>
+     </div>
      {peopleByRoot[item.cnpjRoot]?.state==='loading'||!peopleByRoot[item.cnpjRoot]?
       <p className="prospect-people-loading"><LoaderCircle size={15} className="prospect-spin"/> Pesquisando gestores automaticamente...</p>:
       peopleByRoot[item.cnpjRoot]?.state==='error'?
        <p className="prospect-manager-error" role="status">{peopleByRoot[item.cnpjRoot]?.error||'Não foi possível consultar os gestores.'}</p>:
       (peopleByRoot[item.cnpjRoot]?.result?.people.length||0)>0?
        <div className="prospect-person-list">{peopleByRoot[item.cnpjRoot]?.result?.people.map((person,i)=><div className="prospect-person" key={person.source+person.name+i}>
-        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div><strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role}</small></div>
+        <span className="prospect-person-avatar"><UsersRound size={15}/></span><div>
+         <strong>{person.name}{person.partialName?' (parcial)':''}</strong><small>{person.role} · Fonte: {person.source==='exa'?'Exa':person.source==='apollo'?'Apollo':person.source==='hunter'?'Hunter':'OpenCNPJ'}</small>
+         {person.linkedinUrl?
+          <a href={person.linkedinUrl} target="_blank" rel="noopener noreferrer" className="muted-small" style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:4}}>
+           Ver perfil LinkedIn <ExternalLink size={12}/>
+          </a>:
+          <a href={linkedinPeopleSearchUrl(item.legalName,item.tradeName,person.name)} target="_blank" rel="noopener noreferrer" className="muted-small" style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:4}}>
+           Procurar esta pessoa no LinkedIn <ExternalLink size={12}/>
+          </a>}
+        </div>
        </div>)}</div>:
-       <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável para esta empresa.</p>}
+       <p className="muted-small" style={{marginTop:10}}>Nenhum gestor identificado com correspondência confiável nas fontes conectadas. Use a pesquisa no LinkedIn acima para conferir diretamente.</p>}
+     <p className="muted-small" style={{marginTop:9}}>Links diretos de perfis vêm de fontes profissionais como a Exa; os demais abrem uma busca manual no LinkedIn. Confirme empresa e cargo antes de usar. A Lead Sync API não oferece busca geral de funcionários.</p>
     </div>
     </div><div className="result-actions"><button className="btn small primary" disabled={saved.includes(item.cnpj)||saving===item.cnpj} onClick={()=>save(item)}>{saved.includes(item.cnpj)?<CheckCircle2 size={15}/>:<Plus size={15}/>} {saved.includes(item.cnpj)?'Lead salvo':saving===item.cnpj?'Salvando...':'Salvar lead'}</button></div>
    </article>)}</div>}

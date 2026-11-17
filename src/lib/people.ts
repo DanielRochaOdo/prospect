@@ -1,7 +1,10 @@
+import {verifiedLinkedInProfileUrl} from './linkedin-profile.ts';
 /** Gestores profissionais e responsáveis societários identificados por fontes diferentes. */
 export type PeopleProvider='exa'|'opencnpj'|'apollo'|'hunter';
 export type DecisionMaker={
  name:string;role:string;organization:string;source:PeopleProvider;partialName:boolean;
+ /** Perfil profissional informado pela fonte Exa; nunca inferir uma URL. */
+ linkedinUrl?:string;
 };
 
 const record=(v:unknown):Record<string,unknown>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -30,7 +33,7 @@ export function mapOpenCnpjPeople(payload:unknown,cnpj:string,companyName:string
   return [{name,role,organization:text(data.razaoSocial)||companyName,source:'opencnpj' as const,partialName:false}];
  });
 }
-const roles=/\b(?:gerente|diretor(?:a)?|coordenador(?:a)?|presidente|vice[- ]presidente|s[oó]cio[- ]administrador|administrador(?:a)?|head of|hr manager|human resources manager|benefits manager|chief (?:people|human resources|executive|operating) officer|people and culture manager)\b/iu;
+const roles=/\b(?:gerente|diretor(?:a)?|coordenador(?:a)?|presidente|vice[- ]presidente|s[oó]cio[- ]administrador|administrador(?:a)?|head of|head|ceo|cfo|coo|chro|chief (?:people|human resources|executive|operating|financial) officer|hr manager|human resources manager|benefits manager|people and culture manager)\b/iu;
 const forbiddenName=/\b(?:gerente|diretor|coordenador|empresa|recursos|executive|manager|administrador|linkedin|profile)\b/i;
 const isName=(s:string)=>s.length<=100&&/^[\p{L}][\p{L}'-]+(?:\s+[\p{L}][\p{L}'-]+){1,5}$/u.test(s)&&!forbiddenName.test(normalize(s));
 const extractRole=(s:string)=>{
@@ -74,7 +77,8 @@ export function mapExaPeople(payload:unknown,companyName:string,tradeName?:strin
   if(!companyIsInCurrentRole(roleEvidence,aliases))return [];
   const role=extractRole(roleEvidence);
   if(!role)return [];
-  return [{name,role,organization:companyName,source:'exa' as const,partialName:false}];
+  const linkedinUrl=verifiedLinkedInProfileUrl(r.url);
+  return [{name,role,organization:companyName,source:'exa' as const,partialName:false,...(linkedinUrl?{linkedinUrl}:{})}];
  });
 }
 const weight=(role:string)=>{
@@ -85,7 +89,7 @@ const weight=(role:string)=>{
 };
 export function mergeDecisionMakers(people:DecisionMaker[],limit=8):DecisionMaker[]{
  const list=people.filter(p=>!!p.name&&!!p.role&&weight(p.role)>0)
-  .sort((a,b)=>weight(b.role)-weight(a.role)||Number(a.source==='opencnpj')-Number(b.source==='opencnpj'));
+  .sort((a,b)=>weight(b.role)-weight(a.role)||Number(!!b.linkedinUrl)-Number(!!a.linkedinUrl)||Number(a.source==='opencnpj')-Number(b.source==='opencnpj'));
  const seen=new Set<string>();const out:DecisionMaker[]=[];
  for(const item of list){
   const key=normalize(item.name);
