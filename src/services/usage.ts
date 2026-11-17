@@ -38,12 +38,12 @@ export async function finish(id:string,status:number,duration:number){
 export async function providerFetch(provider:Provider,operation:Operation,user:User,url:string,init:RequestInit={}){
  const id=await reserve(provider,operation,user);const start=Date.now();let status=0;
  try{
-  for(let attempt=0;attempt<2;attempt++){
+  for(let attempt=0;attempt<(provider==='localiza'?1:2);attempt++){
    try{
     const response=await fetch(url,{...init,cache:'no-store',signal:AbortSignal.timeout(20000)});
     status=response.status;
     if(response.ok)return await response.json() as unknown;
-    if(status>=500&&attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+    if(status>=500&&attempt===0&&provider!=='localiza'){await new Promise(resolve=>setTimeout(resolve,350));continue;}
     if(status===404)throw new AppError(404,'Empresa ou estabelecimento não encontrado.');
     if(status===429)throw new AppError(429,'Limite do fornecedor atingido. Tente novamente mais tarde.');
     if(status===401||status===403)throw new AppError(503,`Credenciais de ${provider} inválidas ou sem permissão.`);
@@ -52,7 +52,7 @@ export async function providerFetch(provider:Provider,operation:Operation,user:U
    }catch(err){
     if(err instanceof AppError)throw err;
     status=503;
-    if(attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+    if(attempt===0&&provider!=='localiza'){await new Promise(resolve=>setTimeout(resolve,350));continue;}
     throw new AppError(502,`Falha de conexão com ${provider} após uma nova tentativa.`);
    }
   }

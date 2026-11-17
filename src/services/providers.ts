@@ -1,6 +1,8 @@
 import type {User} from '@/lib/auth';
 import {AppError} from '@/lib/errors';
 import {normalizeCnpj,cnpjKind} from '@/lib/cnpj';
+import {ficharioMode,ficharioPairs,ficharioRows,mapFichario,ficharioHasMore} from '@/lib/fichario';
+import type {FicharioCursor} from '@/lib/fichario';
 import {providerFetch} from './usage';
 import type {z} from 'zod';
 import type {searchSchema} from '@/lib/validation';
@@ -97,79 +99,63 @@ export async function searchLocaliza(query:Search,user:User){
  if(query.branches==='headquarters')items=items.filter(i=>i.isHeadquarters===true);
  return {items,nextCursor:str(result.next_cursor),partial:!!result.has_more,snapshot:str(result.snapshot)};
 }
-const allStates=['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
-type FicharioCursor={pair:number;page:number};
-const firstValue=(row:Record<string,unknown>,...keys:string[])=>{
- for(const key of keys){const value=row[key];if(typeof value==='string'&&value.trim())return value.trim();if(typeof value==='number'||typeof value==='boolean')return String(value);}
- return null;
-};
-function ficharioRows(input:Record<string,unknown>):Record<string,unknown>[]{
- for(const key of ['resultados','results','empresas','items','data']){
-  const value=input[key];
-  if(Array.isArray(value))return value.map(object);
-  if(value&&typeof value==='object'){
-   const nested=ficharioRows(object(value));
-   if(nested.length)return nested;
-  }
- }
- return [];
-}
-function mapFichario(input:Record<string,unknown>):CompanyResult|null{
- const full=normalizeCnpj(firstValue(input,'cnpj','cnpj_completo','cnpjCompleto','documento')??'');
- if(full.length!==14)return null;
- const matrix=firstValue(input,'identificador_matriz_filial','matriz_filial','tipo_estabelecimento','isHeadquarters','matriz');
- const isHeadquarters=matrix==='1'||matrix?.toLowerCase()==='matriz'||matrix==='true'?true:
-  matrix==='2'||matrix?.toLowerCase()==='filial'||matrix==='false'?false:null;
- return {cnpj:full,cnpjRoot:full.slice(0,8),
-  legalName:firstValue(input,'razao_social','nome_empresarial','legalName')??'Razão social não informada',
-  tradeName:firstValue(input,'nome_fantasia','fantasia','tradeName'),isHeadquarters,
-  status:firstValue(input,'situacao_cadastral','situacao','status'),
-  cnae:firstValue(input,'cnae_fiscal_principal','cnae_principal','cnaePrincipal','cnae'),
-  segment:firstValue(input,'cnae_descricao','descricao_cnae','cnaeDescription','atividade'),
-  city:firstValue(input,'municipio','cidade','city'),state:firstValue(input,'uf','estado','state'),
-  district:firstValue(input,'bairro'),
-  address:[firstValue(input,'tipo_logradouro'),firstValue(input,'logradouro'),firstValue(input,'numero'),firstValue(input,'complemento')].filter(Boolean).join(' ')||firstValue(input,'endereco'),
-  postalCode:firstValue(input,'cep','zipCode'),
-  phone:firstValue(input,'telefone','telefone1','telefone_1','numero_telefone','phone'),
-  email:firstValue(input,'email','correio_eletronico'),source:'fichario'};
-}
-function ficharioHasMore(response:Record<string,unknown>,rows:Record<string,unknown>[],page:number,pageSize:number){
- const explicit=response.has_more??response.hasMore;
- if(typeof explicit==='boolean')return explicit&&page<50;
- const pages=Number(response.total_paginas??response.totalPages??response.total_pages);
- if(Number.isFinite(pages)&&pages>0)return page<Math.min(50,pages);
- return rows.length>=pageSize&&page<50;
-}
+/**
+ * Fichário é alternativa cadastral sem chave. Usa o endpoint específico para o filtro:
+ * /busca (prefixo de nome), /busca-avancada (CNAE/UF ou UF/cidade), /cnpj (14 dígitos).
+ * Limita a quatro páginas por pesquisa e não faz varredura em massa.
+ */
 export async function searchFichario(query:Search,user:User,cursor?:FicharioCursor){
- const list=(value:string|string[]|undefined)=>value===undefined?[]:Array.isArray(value)?value:[value];
- const cnaes=list(query.cnae).map(value=>value.replace(/\D/g,'')).filter(value=>/^\d{7}$/.test(value));
- const states=list(query.state).map(value=>value.toUpperCase()).filter(value=>allStates.includes(value));
- if(!states.length)throw new AppError(400,'Selecione ao menos uma UF para pesquisar no Fichário.');
- const cities=list(query.city);
- const regions=states;
- const cityFilters=cities.length?cities:[''];
- const pairs=cnaes.flatMap(cnae=>regions.flatMap(state=>cityFilters.map(city=>({cnae,state,city}))));
+ const mode=ficharioMode(query);
+ if(!mode)throw new AppError(400,'O fallback Fichário exige CNPJ completo, nome, CNAE ou cidade com UF.');
+ const pairs=ficharioPairs(query,mode);
  let pairIndex=Math.max(0,cursor?.pair??0),page=Math.max(1,cursor?.page??1);
  let calls=0;const items:CompanyResult[]=[];let failure:unknown;
- while(pairIndex<pairs.length&&items.length<query.pageSize&&calls<27){
+ while(pairIndex<pairs.length&&items.length<query.pageSize&&calls<2){
   const pair=pairs[pairIndex];
-  const pageSize=Math.min(20,query.pageSize-items.length);
-  const url=new URL('https://fichario.app/api/v1/busca-avancada');
-  url.searchParams.set('cnae',pair.cnae);url.searchParams.set('uf',pair.state);
-  if(pair.city)url.searchParams.set('cidade',pair.city);
-  url.searchParams.set('situacao','ativa');
-  url.searchParams.set('por_pagina',String(pageSize));url.searchParams.set('pagina',String(page));
+  let url:URL;
+  if(mode==='exact')url=new URL('https://fichario.app/api/v1/cnpj/'+normalizeCnpj(query.cnpj||''));
+  else if(mode==='name'){
+   url=new URL('https://fichario.app/api/v1/busca');
+   url.searchParams.set('q',query.name?.trim()||'');
+   url.searchParams.set('uf',pair.state);
+   if(pair.city)url.searchParams.set('cidade',pair.city);
+  }else{
+   url=new URL('https://fichario.app/api/v1/busca-avancada');
+   if(pair.cnae)url.searchParams.set('cnae',pair.cnae);
+   url.searchParams.set('uf',pair.state);
+   if(pair.city)url.searchParams.set('cidade',pair.city);
+   url.searchParams.set('situacao','ativa');
+   url.searchParams.set('por_pagina','20');
+   url.searchParams.set('pagina',String(page));
+  }
   try{
-   const response=object(await providerFetch('fichario','search',user,url.toString()));
-   const rows=ficharioRows(response);
-   for(const raw of rows.slice(0,pageSize)){const item=mapFichario(raw);if(item)items.push(item);}
+   const response=await providerFetch('fichario','search',user,url.toString());
+   const rows=mode==='exact'?[response]:ficharioRows(response);
+   for(const raw of rows){
+    const item=mapFichario(raw);
+    if(item)items.push(item);
+   }
    calls++;
-   if(ficharioHasMore(response,rows,page,pageSize))page++;
+   if(mode==='advanced'&&ficharioHasMore(response,rows,page,20))page++;
    else{pairIndex++;page=1;}
   }catch(error){failure=error;break;}
  }
- const next=pairIndex<pairs.length?{pair:pairIndex,page}:null;
- return {items:items.slice(0,query.pageSize),nextCursor:next,partial:!!next,calls,
+ // A busca por nome retorna somente dados resumidos. Completar um pequeno
+ // conjunto com o endpoint cadastral do próprio Fichário melhora telefone e CNAE.
+ // Falha individual de enriquecimento nunca elimina os resultados encontrados.
+ if(mode==='name'&&items.length&&!failure){
+  const targets=items.filter(item=>!item.phone).slice(0,3);
+  const details=await Promise.allSettled(targets.map(item=>
+   providerFetch('fichario','search',user,'https://fichario.app/api/v1/cnpj/'+item.cnpj)
+  ));
+  for(const detail of details){
+   if(detail.status!=='fulfilled')continue;
+   const full=mapFichario(detail.value);
+   if(full)items.push(full);
+  }
+ }
+ const next=!failure&&pairIndex<pairs.length?{pair:pairIndex,page}:null;
+ return {items,nextCursor:next,partial:!!next,calls,
   error:failure instanceof Error?failure.message:failure?String(failure):undefined};
 }
 export async function searchGoogle(query:Search,user:User){

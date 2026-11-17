@@ -2,20 +2,21 @@ import type {User} from '@/lib/auth';
 import {AppError} from '@/lib/errors';
 import {normalizeCnpj,cnpjKind} from '@/lib/cnpj';
 import {mergeRegistryCompanies} from '@/lib/company-merge';
+import {shouldFallbackFichario,ficharioMode} from '@/lib/fichario';
+import type {FicharioCursor} from '@/lib/fichario';
 import {searchCnpj,searchFichario,searchGoogle,searchLocaliza} from '@/services/providers';
 import type {CompanyResult,PlaceResult} from '@/services/providers';
 import type {searchSchema} from '@/lib/validation';
 import type {z} from 'zod';
 
 type Query=z.infer<typeof searchSchema>;
-type FicharioCursor={pair:number;page:number};
-type CursorState={v:1;localiza?:string;cnpj?:string;localizaDone:boolean;cnpjDone:boolean;fichario?:FicharioCursor;ficharioActive?:boolean};
+type CursorState={v:1;localiza?:string;cnpj?:string;localizaDone:boolean;cnpjDone:boolean;fichario?:FicharioCursor;ficharioActive?:boolean;ficharioDone?:boolean};
 export type SourceStatus={service:'localiza'|'fichario'|'cnpjai'|'google';state:'ok'|'error'|'skipped';message?:string};
 function decodeCursor(input?:string):CursorState|null{
   if(!input)return null;
   try{
     const value=JSON.parse(Buffer.from(input,'base64url').toString('utf8')) as CursorState;
-    if(value.v!==1||typeof value.localizaDone!=='boolean'||typeof value.cnpjDone!=='boolean'||(value.localiza&&typeof value.localiza!=='string')||(value.cnpj&&typeof value.cnpj!=='string')||(value.fichario&&(!Number.isInteger(value.fichario.pair)||value.fichario.pair<0||!Number.isInteger(value.fichario.page)||value.fichario.page<1))||(value.ficharioActive!==undefined&&typeof value.ficharioActive!=='boolean'))throw Error();
+    if(value.v!==1||typeof value.localizaDone!=='boolean'||typeof value.cnpjDone!=='boolean'||(value.localiza&&typeof value.localiza!=='string')||(value.cnpj&&typeof value.cnpj!=='string')||(value.fichario&&(!Number.isInteger(value.fichario.pair)||value.fichario.pair<0||!Number.isInteger(value.fichario.page)||value.fichario.page<1))||(value.ficharioActive!==undefined&&typeof value.ficharioActive!=='boolean')||(value.ficharioDone!==undefined&&typeof value.ficharioDone!=='boolean'))throw Error();
     return value;
   }catch{throw new AppError(400,'Paginação inválida. Reinicie a pesquisa.');}
 }
@@ -53,6 +54,7 @@ export async function discover(query:Query,user:User){
   let cnpjDone=page?.cnpjDone??false;
   let ficharioCursor=page?.fichario;
   let ficharioActive=page?.ficharioActive??false;
+  let ficharioDone=page?.ficharioDone??false;
   const firstPage=!page;
   const selectedSegments=Array.isArray(query.segment)?query.segment:query.segment?[query.segment]:[];
   const selectedSectors=Array.isArray(query.sector)?query.sector:query.sector?[query.sector]:[];
@@ -87,16 +89,26 @@ export async function discover(query:Query,user:User){
     }
   }
 
-  const cnaes=Array.isArray(query.cnae)?query.cnae:query.cnae?[query.cnae]:[];
-  const shouldFallback=!doc&&query.activeOnly&&cnaes.length>0&&(ficharioActive||localResult.status==='rejected');
+  // O fallback precisa funcionar também com nome e cidade, não apenas com CNAE.
+  // Só é acionado se não houver resultados cadastrais compatíveis com os filtros
+  // ou se a LocalizaCNPJ falhar. Não repete páginas já esgotadas.
+  const eligible=records.filter(row=>matchesFilters(row,query)).length;
+  const shouldFallback=shouldFallbackFichario(
+    query,eligible,localResult.status==='rejected',ficharioActive,ficharioDone
+  );
   if(shouldFallback){
     ficharioActive=true;
     try{
       const result=await searchFichario({...query,cursor:undefined},user,page?.fichario);
       records.push(...result.items);
       ficharioCursor=result.nextCursor??undefined;
-      statuses.push({service:'fichario',state:result.error?'error':'ok',message:result.error??'Fallback cadastral aplicado; o Fichário pesquisa CNAE principal.'});
+      ficharioDone=!ficharioCursor;
+      const mode=ficharioMode(query);
+      const note=mode==='name'?'O Fichário busca pelo início do nome empresarial ou fantasia.':
+       mode==='advanced'?'Fallback Fichário: CNAE principal ou localização.':'Consulta cadastral Fichário por CNPJ.';
+      statuses.push({service:'fichario',state:result.error?'error':'ok',message:result.error??note});
     }catch(e){
+      ficharioDone=true;
       statuses.push({service:'fichario',state:'error',message:errorMessage(e)});
     }
   }
@@ -128,7 +140,7 @@ export async function discover(query:Query,user:User){
   }
 
   const anyOk=statuses.some(s=>s.state==='ok');
-  const nextCursor=(anyOk||!!ficharioCursor)&&(!localDone||(!cnpjDone&&!!doc)||!!ficharioCursor)?encodeCursor({v:1,localiza:localCursor??undefined,cnpj:cnpjCursor??undefined,localizaDone:localDone,cnpjDone:cnpjDone,fichario:ficharioCursor,ficharioActive}):null;
+  const nextCursor=(anyOk||!!ficharioCursor)&&(!localDone||(!cnpjDone&&!!doc)||!!ficharioCursor)?encodeCursor({v:1,localiza:localCursor??undefined,cnpj:cnpjCursor??undefined,localizaDone:localDone,cnpjDone:cnpjDone,fichario:ficharioCursor,ficharioActive,ficharioDone}):null;
   return {items,places,sourceStatus:statuses,nextCursor,partial:!!nextCursor,
     phoneCount:items.filter(x=>!!x.phone).length};
 }
