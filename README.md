@@ -209,3 +209,23 @@ npm run dev
 ### Correção do erro HTTP 400 no XLSX
 
 A exportação valida apenas o mínimo necessário para gerar a planilha (CNPJ com 14 posições, nome opcional e fonte cadastral permitida), sem exigir que campos públicos como e-mail satisfaçam as regras rígidas do cadastro de leads. Registros isolados incompletos não derrubam a exportação dos demais. O endpoint aceita somente dados cadastrais, não dados do Google Maps, e preserva o CNPJ como texto.
+
+## LinkedIn Lead Sync — OAuth (domínio de produção)
+
+A aplicação permite **autorizar e armazenar de forma criptografada o token OAuth** de uma conta LinkedIn para o produto Lead Sync API. Essa primeira etapa **não sincroniza formulários ou leads automaticamente** e **não permite descobrir funcionários arbitrários**: os recursos posteriores só se aplicam aos leads recebidos por formulários próprios, nas organizações ou contas de anúncios às quais a conta autorizada tem acesso.
+
+1. Na aba **Auth** do [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps), cadastre exatamente:
+   `https://prospect.odontoart.com/api/integrations/linkedin/callback`
+2. No ambiente **Production** da Vercel, configure manualmente:
+   `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI` e `LINKEDIN_TOKEN_ENCRYPTION_KEY`.
+3. O valor do redirect deve ser idêntico à URL do passo 1. Para gerar uma chave exclusiva AES-256-GCM de 64 caracteres hexadecimais, execute em seu computador:
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   Guarde-a apenas no `.env.local` e no gerenciador de segredos da Vercel; **não** cole a saída no GitHub ou nesta conversa. Não a troque sem antes desconectar e reconectar o LinkedIn.
+4. Execute manualmente a migração do Neon:
+   `node --env-file=.env.local scripts/migrate.mjs`.
+   A nova tabela `linkedin_oauth_connections` armazena os tokens cifrados com AES-256-GCM, data de expiração e escopos. Nenhum token em texto puro é gravado e o status nunca devolve tokens.
+5. Após o redeploy, entre como **administrador** em **Configurações → LinkedIn Lead Sync → Autorizar LinkedIn** e aceite os escopos concedidos. O app solicita `r_marketing_leadgen_automation`, `r_ads` e `r_organization_admin`. O consentimento usa um `state` aleatório guardado em cookie HttpOnly temporário; o callback verifica o valor antes de trocar o código por token.
+6. A conexão aparece como autorizada com a data de validade. Tokens do LinkedIn geralmente expiram; a interface permite reconectar. Desconectar elimina o registro de token local no Neon, mas não revoga a autorização no LinkedIn. O acesso aos formulários dependerá também dos papéis da conta nas organizações/contas de anúncios e da implementação de sincronização posterior.
+
+**Segurança:** nunca envie `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_TOKEN_ENCRYPTION_KEY` ou códigos/tokens OAuth em prints, commits ou chats. Todas as rotas de status e administração exigem usuário administrador autenticado. A URL de retorno é pública, mas valida o cookie `state` e a sessão do administrador.
+

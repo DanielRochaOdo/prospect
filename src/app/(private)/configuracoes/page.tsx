@@ -3,11 +3,12 @@
 import {useEffect, useMemo, useState} from 'react';
 import {
   AlertTriangle, ArrowUpRight, Building2, Cloud, Gauge, Info,
-  Network, Save, ShieldCheck, UsersRound, ContactRound
+  Network, Save, ShieldCheck, UsersRound, ContactRound, Link2
 } from 'lucide-react';
 import {apiRequest, patch, post} from '@/lib/client';
 
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
+type LinkedInStatus={configured:boolean;connected:boolean;active:boolean;expiresAt:string|null;scopes:string|null};
 type Provider='cnpjai'|'localiza'|'fichario'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
 type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'qsa'|'domain_finder'|'domain_search';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
 
@@ -37,6 +38,10 @@ export default function Configuracoes(){
   const [error,setError]=useState('');
   const [message,setMessage]=useState('');
   const [saving,setSaving]=useState('');
+  const [linkedin,setLinkedin]=useState<LinkedInStatus|null>(null);
+  const [linkedinLoading,setLinkedinLoading]=useState(true);
+  const [linkedinError,setLinkedinError]=useState('');
+  const [disconnecting,setDisconnecting]=useState(false);
 
   useEffect(()=>{
     apiRequest<{limits:Limit[]}>('/api/limits')
@@ -44,6 +49,14 @@ export default function Configuracoes(){
       .catch((e:Error)=>setError(e.message))
       .finally(()=>setLoading(false));
     refreshSegments();
+    apiRequest<LinkedInStatus>('/api/integrations/linkedin/status')
+      .then(setLinkedin).catch((e:Error)=>setLinkedinError(e.message)).finally(()=>setLinkedinLoading(false));
+    const outcome=new URLSearchParams(window.location.search).get('linkedin');
+    if(outcome==='connected')setMessage('LinkedIn autorizado. Os formulários ainda não são sincronizados automaticamente.');
+    if(outcome==='error')setLinkedinError('Não foi possível concluir a autorização. Verifique o redirect, as permissões e o banco.');
+    if(outcome==='denied')setLinkedinError('Autorização cancelada ou negada no LinkedIn.');
+    if(outcome==='configuration')setLinkedinError('Configure as variáveis LINKEDIN_* antes de conectar.');
+    if(outcome==='auth')setLinkedinError('Faça login como administrador antes de conectar.');
   },[]);
 
   const groups=useMemo(()=>providerInfo.map(info=>({info,items:rows.map((row,index)=>({row,index})).filter(({row})=>row.provider===info.id)})),[rows]);
@@ -76,6 +89,17 @@ export default function Configuracoes(){
       setMessage(`Configuração de ${providerInfo.find(p=>p.id===l.provider)?.name} (${operationName[l.operation]}) salva.`);
     }catch(e){setError((e as Error).message);}
     finally{setSaving('');}
+  }
+
+  async function disconnectLinkedIn(){
+    if(!window.confirm('Desconectar o LinkedIn do Prospect?'))return;
+    setDisconnecting(true);setLinkedinError('');
+    try{
+      await post('/api/integrations/linkedin/disconnect',{});
+      setLinkedin(prev=>prev?{...prev,connected:false,active:false,expiresAt:null}:prev);
+      setMessage('Conexão LinkedIn removida. Você pode autorizar novamente.');
+    }catch(e){setLinkedinError((e as Error).message);}
+    finally{setDisconnecting(false);}
   }
 
   return <>
@@ -129,6 +153,25 @@ export default function Configuracoes(){
     </section>
 
     <section className="panel section-space"><h2 className="panel-title">Segmentos disponíveis na pesquisa</h2><p className="panel-subtitle">Categorias de acesso rápido com termos e CNAEs.</p><form onSubmit={createSegment}><div className="fields-grid"><label>Categoria<input value={segName} onChange={e=>setSegName(e.target.value)} required placeholder="Educação"/></label><label>Termo de busca<input value={segTerm} onChange={e=>setSegTerm(e.target.value)} required placeholder="educação"/></label><label>CNAE (opcional)<input maxLength={7} value={segCnae} onChange={e=>setSegCnae(e.target.value.replace(/\D/g,''))} placeholder="4711302"/></label></div><div className="form-foot"><button type="submit" className="btn primary"><Save size={14}/>Adicionar segmento</button></div></form><div className="table-wrapper section-space"><table className="data-table"><thead><tr><th>Categoria</th><th>Termo</th><th>CNAE</th><th>Status</th><th>Ação</th></tr></thead><tbody>{segments.map(s=><tr key={s.id}><td>{s.name}</td><td>{s.search_term}</td><td>{s.cnae||'—'}</td><td>{s.active?'Ativo':'Inativo'}</td><td><div className="result-actions"><button className="btn small outline" onClick={()=>toggleSegment(s)}>{s.active?'Desativar':'Ativar'}</button><button className="btn small danger" onClick={()=>removeSegment(s.id)}>Excluir</button></div></td></tr>)}</tbody></table></div></section>
-    <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY, GOOGLE_PLACES_API_KEY EXA_API_KEY, APOLLO_API_KEY e HUNTER_API_KEY nas variáveis de ambiente. O OpenCNPJ não exige chave. Consulte o README para as etapas de deploy.</div></section>
+
+    <section className="panel section-space" aria-labelledby="linkedin-heading">
+      <div className="split-between">
+        <div><h2 id="linkedin-heading" className="panel-title">LinkedIn Lead Sync</h2><p className="panel-subtitle">Conecte a conta autorizada a receber leads dos formulários do LinkedIn.</p></div>
+        <Link2 size={21}/>
+      </div>
+      {linkedinError&&<div className="alert error section-space" role="alert">{linkedinError}</div>}
+      {linkedinLoading?<p className="muted-small section-space">Verificando autorização LinkedIn...</p>:
+       <div className="section-space">
+        <p><strong>Conexão:</strong> {!linkedin?.configured?'Credenciais não configuradas':!linkedin?.connected?'Ainda não autorizada':linkedin.active?'Autorizada':'Token expirado'}</p>
+        {linkedin?.connected&&<p className="muted-small">Validade do token: {linkedin.expiresAt?new Date(linkedin.expiresAt).toLocaleDateString('pt-BR'):'não informada'}. Ao expirar, autorize novamente.</p>}
+        <div className="result-actions section-space">
+         {linkedin?.configured&&<a className="btn primary" href="/api/integrations/linkedin/connect">{linkedin.connected?'Reconectar LinkedIn':'Autorizar LinkedIn'}</a>}
+         {linkedin?.connected&&<button type="button" className="btn outline" disabled={disconnecting} onClick={disconnectLinkedIn}>{disconnecting?'Desconectando...':'Desconectar'}</button>}
+        </div>
+       </div>}
+      <p className="muted-small">Esta etapa configura apenas o acesso OAuth. A leitura automática dos formulários e respostas será habilitada por uma implementação separada. A Lead Sync API não permite pesquisar livremente gestores de outras empresas.</p>
+    </section>
+
+    <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY, GOOGLE_PLACES_API_KEY, EXA_API_KEY, APOLLO_API_KEY, HUNTER_API_KEY e as quatro variáveis LINKEDIN_* nas variáveis de ambiente. O OpenCNPJ não exige chave. Consulte o README para as etapas de deploy.</div></section>
   </>;
 }

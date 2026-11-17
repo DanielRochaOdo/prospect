@@ -262,3 +262,17 @@ UPDATE api_limits l SET monthly_limit=5000, minute_limit=20, updated_at=now()
  WHERE l.provider='google' AND l.operation='text_pro'
    AND l.monthly_limit=1000 AND l.minute_limit=20
    AND NOT EXISTS (SELECT 1 FROM audit_logs a WHERE a.subject_type='api_limits' AND a.subject_id=l.provider||':'||l.operation AND a.action='update');
+
+-- OAuth LinkedIn Lead Sync. Os tokens são cifrados com AES-256-GCM antes de gravar.
+-- Nenhuma credencial do app ou token em texto puro fica no banco.
+-- statement
+CREATE TABLE IF NOT EXISTS linkedin_oauth_connections (
+ id text PRIMARY KEY DEFAULT 'primary' CHECK (id='primary'),
+ authorized_by uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ access_token_encrypted text NOT NULL,
+ refresh_token_encrypted text,
+ token_expires_at timestamptz NOT NULL,
+ scopes text NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
