@@ -9,6 +9,8 @@ import {apiRequest, patch, post} from '@/lib/client';
 
 type Segment={id:string;name:string;search_term:string;cnae:string|null;active:boolean};
 type LinkedInStatus={configured:boolean;connected:boolean;active:boolean;expiresAt:string|null;scopes:string|null};
+type LinkedInAccount={id:string;name:string;status:string;reference:string;test:boolean};
+type LinkedInForm={id:string;name:string;state:string;version:number|null;created:number|null};
 type Provider='cnpjai'|'localiza'|'fichario'|'google'|'exa'|'opencnpj'|'apollo'|'hunter';
 type Limit={provider:Provider;operation:'basic'|'branches'|'search'|'text_pro'|'text_enterprise'|'people_search'|'qsa'|'domain_finder'|'domain_search';monthly_limit:number|null;minute_limit:number;enabled:boolean;used:number};
 
@@ -42,6 +44,16 @@ export default function Configuracoes(){
   const [linkedinLoading,setLinkedinLoading]=useState(true);
   const [linkedinError,setLinkedinError]=useState('');
   const [disconnecting,setDisconnecting]=useState(false);
+  const [linkedinAccounts,setLinkedinAccounts]=useState<LinkedInAccount[]>([]);
+  const [selectedLinkedInAccount,setSelectedLinkedInAccount]=useState('');
+  const [linkedinForms,setLinkedinForms]=useState<LinkedInForm[]>([]);
+  const [linkedinTestError,setLinkedinTestError]=useState('');
+  const [accountsLoading,setAccountsLoading]=useState(false);
+  const [formsLoading,setFormsLoading]=useState(false);
+  const [accountsTested,setAccountsTested]=useState(false);
+  const [formsTested,setFormsTested]=useState(false);
+  const [accountsHasMore,setAccountsHasMore]=useState(false);
+  const [formsHasMore,setFormsHasMore]=useState(false);
 
   useEffect(()=>{
     apiRequest<{limits:Limit[]}>('/api/limits')
@@ -89,6 +101,27 @@ export default function Configuracoes(){
       setMessage(`Configuração de ${providerInfo.find(p=>p.id===l.provider)?.name} (${operationName[l.operation]}) salva.`);
     }catch(e){setError((e as Error).message);}
     finally{setSaving('');}
+  }
+
+  async function testLinkedInAccounts(){
+    setAccountsLoading(true);setLinkedinTestError('');setAccountsTested(false);
+    setLinkedinForms([]);setFormsTested(false);
+    try{
+      const data=await apiRequest<{accounts:LinkedInAccount[];hasMore:boolean}>('/api/integrations/linkedin/ad-accounts');
+      setLinkedinAccounts(data.accounts);setAccountsHasMore(data.hasMore);
+      setSelectedLinkedInAccount(data.accounts[0]?.id??'');
+      setAccountsTested(true);
+    }catch(e){setLinkedinTestError((e as Error).message);}
+    finally{setAccountsLoading(false);}
+  }
+  async function testLinkedInForms(){
+    if(!selectedLinkedInAccount)return;
+    setFormsLoading(true);setLinkedinTestError('');setFormsTested(false);
+    try{
+      const data=await apiRequest<{forms:LinkedInForm[];hasMore:boolean}>('/api/integrations/linkedin/forms?accountId='+encodeURIComponent(selectedLinkedInAccount));
+      setLinkedinForms(data.forms);setFormsHasMore(data.hasMore);setFormsTested(true);
+    }catch(e){setLinkedinTestError((e as Error).message);}
+    finally{setFormsLoading(false);}
   }
 
   async function disconnectLinkedIn(){
@@ -169,7 +202,44 @@ export default function Configuracoes(){
          {linkedin?.connected&&<button type="button" className="btn outline" disabled={disconnecting} onClick={disconnectLinkedIn}>{disconnecting?'Desconectando...':'Desconectar'}</button>}
         </div>
        </div>}
-      <p className="muted-small">Esta etapa configura apenas o acesso OAuth. A leitura automática dos formulários e respostas será habilitada por uma implementação separada. A Lead Sync API não permite pesquisar livremente gestores de outras empresas.</p>
+
+      {linkedin?.connected&&linkedin.active&&<div className="section-space" style={{borderTop:'1px solid var(--line)',paddingTop:18}}>
+        <h3 style={{fontSize:15,marginBottom:8}}>Testar acesso aos formulários</h3>
+        <p className="muted-small">Teste somente de leitura: consulta contas e nomes de formulários autorizados. Não baixa respostas, não importa contatos e não altera campanhas.</p>
+        {linkedinTestError&&<div className="alert error section-space" role="alert">{linkedinTestError}</div>}
+        <div className="result-actions section-space">
+          <button type="button" className="btn outline" disabled={accountsLoading||formsLoading} onClick={()=>void testLinkedInAccounts()}>
+            {accountsLoading?'Consultando contas...':'1. Verificar contas de anúncios'}
+          </button>
+        </div>
+        {accountsTested&&<>
+          {linkedinAccounts.length===0?
+            <div className="alert section-space">O LinkedIn não retornou contas de anúncios acessíveis para esta autorização. Verifique suas permissões no Campaign Manager.</div>:
+            <div className="section-space">
+              <p className="muted-small">{linkedinAccounts.length} conta(s) acessível(is){accountsHasMore?' (as 100 primeiras; há outras páginas)':''}.</p>
+              <label style={{display:'block',maxWidth:500}}>Conta de anúncios
+                <select value={selectedLinkedInAccount} onChange={e=>{setSelectedLinkedInAccount(e.target.value);setLinkedinForms([]);setFormsTested(false);}}>
+                  {linkedinAccounts.map(account=><option value={account.id} key={account.id}>{account.name} · #{account.id}{account.test?' (teste)':''}</option>)}
+                </select>
+              </label>
+              <div className="result-actions section-space">
+                <button type="button" className="btn primary" disabled={!selectedLinkedInAccount||formsLoading} onClick={()=>void testLinkedInForms()}>
+                  {formsLoading?'Consultando formulários...':'2. Consultar formulários'}
+                </button>
+              </div>
+            </div>}
+        </>}
+        {formsTested&&<div className="section-space" aria-live="polite">
+          <p><strong>{linkedinForms.length} formulário(s) localizado(s)</strong>{formsHasMore?' (primeiros 50)':''}</p>
+          {linkedinForms.length===0?
+            <p className="muted-small">Acesso confirmado, mas não há formulários retornados para essa conta. Confira se existem formulários de geração de leads no Campaign Manager.</p>:
+            <div className="table-wrapper section-space"><table className="data-table">
+              <thead><tr><th>Formulário</th><th>ID</th><th>Situação</th></tr></thead>
+              <tbody>{linkedinForms.map(form=><tr key={form.id}><td>{form.name}</td><td>{form.id}</td><td>{form.state||'Não informada'}</td></tr>)}</tbody>
+            </table></div>}
+        </div>}
+      </div>}
+      <p className="muted-small section-space">O teste verifica apenas contas e metadados dos formulários. A consulta das respostas dos formulários e a importação automática ao CRM ainda não estão implementadas. A Lead Sync API não permite pesquisar livremente gestores de outras empresas.</p>
     </section>
 
     <section className="panel section-space"><h2 className="panel-title">Configuração das credenciais</h2><p className="panel-subtitle">Por segurança, chaves de API não são exibidas nem alteradas pelo navegador.</p><div className="alert"><AlertTriangle size={15} style={{verticalAlign:'middle',marginRight:8}}/>Cadastre DATABASE_URL, CNPJ_AI_API_KEY, LOCALIZACNPJ_API_KEY, GOOGLE_PLACES_API_KEY, EXA_API_KEY, APOLLO_API_KEY, HUNTER_API_KEY e as quatro variáveis LINKEDIN_* nas variáveis de ambiente. O OpenCNPJ não exige chave. Consulte o README para as etapas de deploy.</div></section>

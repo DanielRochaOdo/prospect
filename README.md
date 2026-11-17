@@ -229,3 +229,15 @@ A aplicação permite **autorizar e armazenar de forma criptografada o token OAu
 
 **Segurança:** nunca envie `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_TOKEN_ENCRYPTION_KEY` ou códigos/tokens OAuth em prints, commits ou chats. Todas as rotas de status e administração exigem usuário administrador autenticado. A URL de retorno é pública, mas valida o cookie `state` e a sessão do administrador.
 
+
+### Teste de leitura das contas e formulários do LinkedIn
+
+Depois de configurar OAuth e confirmar `configured: true`, `connected: true`, `active: true` em `/api/integrations/linkedin/status`, abra **Configurações → LinkedIn Lead Sync → Testar acesso aos formulários**:
+
+1. Clique **Verificar contas de anúncios**: uma requisição autenticada `GET /rest/adAccounts?q=search&pageSize=100` lista contas acessíveis ao usuário.
+2. Escolha uma das contas e clique **Consultar formulários**: uma requisição `GET /rest/leadForms?owner=(sponsoredAccount:urn%3Ali%3AsponsoredAccount%3A...)&q=owner&count=50&start=0` traz os primeiros formulários com nome e situação.
+3. A Vercel guarda o token somente no servidor; o navegador recebe apenas ID/nome/status de contas e formulários. Não é retornado nenhum token, resposta de formulário ou dado pessoal de lead. `401` indica necessidade de reconectar, `403` indica ausência de papel adequado no Campaign Manager ou na página vinculada, `429` é limite da API.
+
+As rotas autenticadas de teste são `/api/integrations/linkedin/ad-accounts` e `/api/integrations/linkedin/forms?accountId=ID`. Exigem usuário administrador no Prospect. O cabeçalho `Linkedin-Version: 202610` é uma versão de referência que deve ser atualizada antes do seu sunset conforme a política de versões do LinkedIn.
+
+Este teste **não** sincroniza leads nem faz alterações na conta LinkedIn.
