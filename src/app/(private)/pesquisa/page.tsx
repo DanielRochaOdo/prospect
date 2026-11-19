@@ -138,7 +138,7 @@ export default function Pesquisa(){
     <button type="button" role="tab" aria-selected={searchMode==='batch'} className={`tab${searchMode==='batch'?' active':''}`} onClick={()=>setSearchMode('batch')}><FileSpreadsheet size={15}/> Pesquisa em lote</button>
    </div>
    {searchMode==='batch'?<div className="prospect-batch-search">
-    <div className="prospect-batch-copy"><FileSpreadsheet size={22}/><div><strong>Consulte vários CNPJs de uma vez</strong><p>Envie uma planilha XLSX ou CSV com uma coluna chamada <b>CNPJ</b>. A primeira aba será processada, até 100 linhas por envio. Formate os CNPJs como texto para preservar zeros à esquerda.</p></div></div>
+    <div className="prospect-batch-copy"><FileSpreadsheet size={22}/><div><strong>Consulte vários CNPJs de uma vez</strong><p>Envie uma planilha XLSX ou CSV com uma coluna chamada <b>CNPJ</b>. A primeira aba será processada, até 1.000 linhas por envio. Formate os CNPJs como texto para preservar zeros à esquerda.</p></div></div>
     <div className="prospect-batch-controls">
      <label className="prospect-batch-file">Planilha de CNPJs<input type="file" accept=".xlsx,.csv" onChange={e=>{setBatchFile(e.target.files?.[0]||null);setBatchSummary(null);setError('');}}/><small>{batchFile?batchFile.name:'Selecione um arquivo Excel (.xlsx) ou CSV'}</small></label>
      <button className="btn primary" type="button" disabled={!batchFile||batchLoading} onClick={()=>void runBatch()}>{batchLoading?<LoaderCircle size={16} className="prospect-spin"/>:<Upload size={16}/>} {batchLoading?'Consultando planilha...':'Pesquisar planilha'}<ArrowRight size={15}/></button>

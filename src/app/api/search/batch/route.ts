@@ -8,7 +8,7 @@ import type {CompanyResult} from '@/services/providers';
 
 export const runtime='nodejs';
 const MAX_FILE_BYTES=5_000_000;
-const MAX_ROWS=100;
+const MAX_ROWS=1000;
 type InputRow={line:number;cnpj:string};
 type OutputRow={line:number;cnpj:string;company?:CompanyResult;status:string};
 
