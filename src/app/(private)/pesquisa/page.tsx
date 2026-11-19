@@ -4,7 +4,7 @@ import {useEffect,useMemo,useState} from 'react';
 import {mergeLoaded,pageSlice,canAdvance,RESULTS_PER_PAGE} from '@/lib/pagination';
 import {useAutomaticPeople} from '@/hooks/useAutomaticPeople';
 import Link from 'next/link';
-import {Search,MapPin,Building2,Phone,Mail,Plus,ArrowRight,Info,AlertTriangle,LoaderCircle,CheckCircle2,ExternalLink,ShieldCheck,UsersRound,FileDown,ChevronLeft,ChevronRight} from 'lucide-react';
+import {Search,MapPin,Building2,Phone,Mail,Plus,ArrowRight,Info,AlertTriangle,LoaderCircle,CheckCircle2,ExternalLink,ShieldCheck,UsersRound,FileDown,ChevronLeft,ChevronRight,FileSpreadsheet,Upload} from 'lucide-react';
 import {apiRequest,post,formatCnpj} from '@/lib/client';
 import type {CompanyResult,PlaceResult} from '@/services/providers';
 import type {DecisionMaker} from '@/lib/people';
@@ -33,6 +33,10 @@ export default function Pesquisa(){
  const [pageNumber,setPageNumber]=useState(1);
  const [preferPhone,setPreferPhone]=useState(true);
  const [searchVersion,setSearchVersion]=useState(0);
+ const [searchMode,setSearchMode]=useState<'individual'|'batch'>('individual');
+ const [batchFile,setBatchFile]=useState<File|null>(null);
+ const [batchLoading,setBatchLoading]=useState(false);
+ const [batchSummary,setBatchSummary]=useState<{total:number;found:number}|null>(null);
  const companies=useMemo(()=>result?.items??[],[result]);
  const pageCompanies=useMemo(()=>{
   const items=pageSlice(companies,pageNumber);
@@ -98,6 +102,21 @@ export default function Pesquisa(){
   }catch(e){setError((e as Error).message);}
   finally{setExporting(false);}
  }
+ async function runBatch(){
+  if(!batchFile||batchLoading)return;
+  setBatchLoading(true);setError('');setBatchSummary(null);
+  try{
+   const form=new FormData();form.append('file',batchFile);
+   const response=await fetch('/api/search/batch',{method:'POST',body:form});
+   if(!response.ok){const data=await response.json().catch(()=>({error:'Não foi possível processar a planilha.'}));throw new Error(data.error||'Falha na pesquisa em lote.');}
+   const total=Number(response.headers.get('X-Batch-Total')||0);
+   const found=Number(response.headers.get('X-Batch-Found')||0);
+   const blob=await response.blob();const url=URL.createObjectURL(blob);
+   const anchor=document.createElement('a');anchor.href=url;anchor.download='prospect-pesquisa-em-lote.xlsx';document.body.appendChild(anchor);anchor.click();anchor.remove();
+   setTimeout(()=>URL.revokeObjectURL(url),1000);setBatchSummary({total,found});
+  }catch(e){setError((e as Error).message);}
+  finally{setBatchLoading(false);}
+ }
  async function save(item:CompanyResult){
   setSaving(item.cnpj);setError('');
   try{await post('/api/leads',{company:item,notes:''});setSaved(arr=>[...arr,item.cnpj]);}
@@ -113,8 +132,20 @@ export default function Pesquisa(){
  return <>
   <div className="page-head"><div><span className="eyebrow">PESQUISA EMPRESARIAL</span><h1>Encontrar empresas</h1><p>Pesquise pelo dado que você conhece. Os registros são complementados automaticamente.</p></div><Link href="/leads" className="btn outline"><Building2 size={16}/>Meus leads</Link></div>
   <section className="panel prospect-search-panel">
-   <div className="prospect-search-heading"><div><h2 className="panel-title">O que você está procurando?</h2><p className="panel-subtitle">Preencha um ou mais campos. CNPJ pode ser completo ou apenas a raiz de 8 caracteres.</p></div><Search size={21} aria-hidden="true"/></div>
-   <form onSubmit={e=>{e.preventDefault();void run();}}>
+   <div className="prospect-search-heading"><div><h2 className="panel-title">O que você está procurando?</h2><p className="panel-subtitle">Pesquise pelos filtros ou envie uma planilha com vários CNPJs.</p></div><Search size={21} aria-hidden="true"/></div>
+   <div className="tabs prospect-search-tabs" role="tablist" aria-label="Tipo de pesquisa">
+    <button type="button" role="tab" aria-selected={searchMode==='individual'} className={`tab${searchMode==='individual'?' active':''}`} onClick={()=>setSearchMode('individual')}><Search size={15}/> Pesquisa individual</button>
+    <button type="button" role="tab" aria-selected={searchMode==='batch'} className={`tab${searchMode==='batch'?' active':''}`} onClick={()=>setSearchMode('batch')}><FileSpreadsheet size={15}/> Pesquisa em lote</button>
+   </div>
+   {searchMode==='batch'?<div className="prospect-batch-search">
+    <div className="prospect-batch-copy"><FileSpreadsheet size={22}/><div><strong>Consulte vários CNPJs de uma vez</strong><p>Envie uma planilha XLSX ou CSV com uma coluna chamada <b>CNPJ</b>. A primeira aba será processada, até 100 linhas por envio. Formate os CNPJs como texto para preservar zeros à esquerda.</p></div></div>
+    <div className="prospect-batch-controls">
+     <label className="prospect-batch-file">Planilha de CNPJs<input type="file" accept=".xlsx,.csv" onChange={e=>{setBatchFile(e.target.files?.[0]||null);setBatchSummary(null);setError('');}}/><small>{batchFile?batchFile.name:'Selecione um arquivo Excel (.xlsx) ou CSV'}</small></label>
+     <button className="btn primary" type="button" disabled={!batchFile||batchLoading} onClick={()=>void runBatch()}>{batchLoading?<LoaderCircle size={16} className="prospect-spin"/>:<Upload size={16}/>} {batchLoading?'Consultando planilha...':'Pesquisar planilha'}<ArrowRight size={15}/></button>
+    </div>
+    <p className="muted-small prospect-batch-hint">O resultado será baixado em Excel com os dados encontrados e o status de cada CNPJ.</p>
+    {batchSummary&&<div className="alert success" role="status"><CheckCircle2 size={15}/> Pesquisa concluída: {batchSummary.found} de {batchSummary.total} CNPJs encontrados. A planilha de resultados foi baixada.</div>}
+   </div>:<form onSubmit={e=>{e.preventDefault();void run();}}>
     <div className="prospect-filter-grid">
      <label className="prospect-filter-wide">CNPJ ou raiz<input value={query.cnpj} onChange={e=>set('cnpj',e.target.value)} placeholder="Ex.: 03.187.913 ou 03.187.913/0001-00" autoComplete="off"/></label>
      <SearchableMultiSelect label="Setor empresarial" options={Array.from(new Map(catalog.sectors.map(x=>[x.search_term,{value:x.search_term,label:x.name}])).values())} value={query.sector} onChange={v=>setQuery(q=>({...q,sector:v}))} placeholder="Buscar setor"/>
@@ -133,7 +164,7 @@ export default function Pesquisa(){
       </div>
       <div className="result-actions"><button type="button" className="btn" disabled={loading} onClick={()=>{setQuery({...empty});setResult(null);setLastQuery(null);setPageNumber(1);setSearchVersion(v=>v+1);setError('');}}>Limpar</button><button className="btn primary" disabled={loading} type="submit">{loading?<LoaderCircle size={16} className="prospect-spin"/>:<Search size={16}/>} {loading?'Consultando...':'Pesquisar empresas'}<ArrowRight size={15}/></button></div>
     </div>
-   </form>
+   </form>}
    <div className="prospect-privacy-note"><ShieldCheck size={16}/><span>Contatos para o CRM vêm de fontes cadastrais. Informações do Google Maps, quando exibidas, são apenas para consulta pontual e não são armazenadas ou exportadas.</span></div>
   </section>
 

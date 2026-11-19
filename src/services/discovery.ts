@@ -40,7 +40,7 @@ function matchesFilters(item:CompanyResult,query:Query){
 const errorMessage=(e:unknown)=>e instanceof Error?e.message:'Falha ao consultar o fornecedor';
 
 /** Uma pesquisa de usuário. Fontes cadastrais geram leads; Google Maps nunca é incorporado aos registros exportáveis. */
-export async function discover(query:Query,user:User){
+export async function discover(query:Query,user:User,options:{includePlaces?:boolean}={}){
   const doc=normalizeCnpj(query.cnpj||'');
   if(doc&&cnpjKind(doc)==='invalid')throw new AppError(400,'Informe uma raiz de 8 caracteres, prefixo ou CNPJ completo válido.');
   const has=(value:unknown)=>Array.isArray(value)?value.length>0:!!value;
@@ -130,7 +130,7 @@ export async function discover(query:Query,user:User){
   const items=mergeRegistryCompanies(records.filter(row=>matchesFilters(row,query)));
   let places:PlaceResult[]=[];
   // Google é somente consulta contextual instantânea, e nunca é usado na composição do CRM.
-  if(firstPage){
+  if(firstPage&&options.includePlaces!==false){
     const googleQuery={...query,name:query.name||(doc?items[0]?.tradeName||items[0]?.legalName||'':''),
       segment:doc?[]:selectedSegments,sector:selectedSectors,cursor:undefined,pageSize:Math.min(8,query.pageSize)};
     if(googleQuery.name||googleQuery.segment.length||googleQuery.sector.length){
